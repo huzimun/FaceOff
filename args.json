@@ -1,5 +1,5 @@
 {
-    "device": "cuda",
+    "device": "cuda:0",
     "prior_generation_precision": "bf16",
     "loss_type": "x",
     "attack_num": 200,

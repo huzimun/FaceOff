@@ -1,0 +1,24 @@
+{
+    "device": "cuda",
+    "prior_generation_precision": "bf16",
+    "loss_type": "x",
+    "attack_num": 200,
+    "alpha": 6,
+    "eps": 16,
+    "input_size": 224,
+    "output_size": 224,
+    "center_crop": 1,
+    "resample_interpolation": "BILINEAR",
+    "data_dir": "/home/humw/Datasets/mini-VGGFace2",
+    "input_name": "set_B",
+    "data_dir_for_target_max": "/home/humw/Datasets/VGGFace2/",
+    "save_dir": "/home/humw/Codes/AAAI/FaceOff/attack/output",
+    "model_type": "photomaker_clip",
+    "pretrained_model_name_or_path": "/home/humw/Pretrain/photomaker-v1.bin",
+    "target_type": "max",
+    "max_distance_json": "/home/humw/Codes/PhotoMaker/PhotoMaker/VGGFace2_image_distance.json",
+    "min_JND_eps_rate": 0.75,
+    "update_interval": 40,
+    "noise_budget_refiner": 1
+}
+

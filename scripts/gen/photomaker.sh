@@ -1,0 +1,19 @@
+python ./customization/target_model/PhotoMaker/inference.py \
+  --input_folders './attack/output/photomaker_clip_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12_wrong' \
+  --save_dir './customization/output/photomaker/photomaker_clip_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12_wrong' \
+  --prompts "a photo of sks person;a dslr portrait of sks person" \
+  --photomaker_ckpt "../../../Pretrain/photomaker-v1.bin" \
+  --base_model_path '../../../Pretrain/RealVisXL_V3.0' \
+  --device "cuda:7" \
+  --seed 42 \
+  --num_steps 50 \
+  --style_strength_ratio 20 \
+  --num_images_per_prompt 4 \
+  --pre_test 0 \
+  --height 1024 \
+  --width 1024 \
+  --lora 0 \
+  --input_name "" \
+  --trigger_word 'sks' \
+  --gaussian_filter 0 \
+  --hflip 0

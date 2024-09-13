@@ -166,8 +166,9 @@ datasets
 
 # pretrains
 pretrains
-.pt
-.h5
+*.pt
+*.h5
+
 # customization models
 customization
 

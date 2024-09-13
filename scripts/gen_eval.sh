@@ -1,4 +1,4 @@
-export adversarial_folder_name="photomaker_clip_pre_test_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
+export adversarial_folder_name="photomaker_clip_pre_test_n_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
 python ./customization/target_model/PhotoMaker/inference.py \
   --input_folders "./output/adversarial_images/${adversarial_folder_name}" \
   --save_dir "./output/customization_outputs/photomaker/${adversarial_folder_name}" \
@@ -19,13 +19,13 @@ python ./customization/target_model/PhotoMaker/inference.py \
   --gaussian_filter 0 \
   --hflip 0
 
-export dir_name="photomaker_clip_pre_test_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
+export dir_name=$adversarial_folder_name
 export adversarial_input_dir="./output/adversarial_images/${dir_name}"
 export customization_output_dir="./output/customization_outputs/photomaker/${dir_name}"
 export evaluation_output_dir="./output/evaluation_outputs/${dir_name}"
 export original_output_dir="./output/customization_outputs/photomaker/mini-VGGFace2/"
 export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-export device="cuda:2"
+export device="cuda:1"
 export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 echo $prompts

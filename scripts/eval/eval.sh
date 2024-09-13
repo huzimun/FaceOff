@@ -6,7 +6,7 @@
 # pip install -e .
 # cd ../..
 
-export dir_name="photomaker_clip_pre_test_x_num200_alpha6_eps16_input224_output224_max_refiner0"
+export dir_name="photomaker_clip_pre_test_n_num200_alpha6_eps16_input224_output224_max_refiner0"
 export adversarial_input_dir="./output/adversarial_images/${dir_name}"
 export customization_output_dir="./output/customization_outputs/photomaker/${dir_name}"
 export evaluation_output_dir="./output/evaluation_outputs/${dir_name}"

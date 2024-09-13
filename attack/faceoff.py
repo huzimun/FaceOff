@@ -115,7 +115,7 @@ def pgd_attack_refiner(model,
         grad = torch.autograd.grad(Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
         if noise_budget_refiner == 1:
-            et = (adv_perturbed_data - original_data).clamp(0, 255).to(torch.float32).cpu().detach().numpy()
+            et = (adv_perturbed_data - original_data).clamp(-255, 255).to(torch.float32).cpu().detach().numpy()
             et = np.minimum(np.maximum(et, -JND), JND)
             et = torch.from_numpy(et).to(model.device).to(model.dtype)
         else:
@@ -196,8 +196,11 @@ def main(args):
     
     with open(args['max_distance_json'], "r", encoding="utf-8") as f:
         max_dist_dict = json.load(f)
-        
-    save_folder = os.path.join(args['save_dir'], args['model_type'] + '_' + args['loss_type'] + '_num' + str(args['attack_num']) + '_alpha' + str(args['alpha']) + '_eps' + str(args['eps']) + '_input' + str(args['input_size']) + '_output' + str(args['output_size']) + '_' + args['target_type'] + '_refiner' + str(args['noise_budget_refiner']) + '_min-eps'+ str(int(args['min_JND_eps_rate']*args['eps'])))
+    
+    if args['noise_budget_refiner'] == 1:
+        save_folder = os.path.join(args['save_dir'], args['model_type'] + '_' + os.path.split(args['data_dir'])[-1] + '_' + args['loss_type'] + '_num' + str(args['attack_num']) + '_alpha' + str(args['alpha']) + '_eps' + str(args['eps']) + '_input' + str(args['input_size']) + '_output' + str(args['output_size']) + '_' + args['target_type'] + '_refiner' + str(args['noise_budget_refiner']) + '_min-eps'+ str(int(args['min_JND_eps_rate']*args['eps'])))
+    else:
+        save_folder = os.path.join(args['save_dir'], args['model_type'] + '_' + os.path.split(args['data_dir'])[-1] + '_' + args['loss_type'] + '_num' + str(args['attack_num']) + '_alpha' + str(args['alpha']) + '_eps' + str(args['eps']) + '_input' + str(args['input_size']) + '_output' + str(args['output_size']) + '_' + args['target_type'] + '_refiner' + str(args['noise_budget_refiner']))
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
     for person_id in sorted(os.listdir(args['data_dir'])):
         person_folder = os.path.join(args['data_dir'], person_id, args['input_name'])
@@ -235,7 +238,7 @@ def main(args):
     return
 
 if __name__ == "__main__":
-    args_path = '/home/humw/Codes/AAAI/FaceOff/args.json'
+    args_path = './args.json'
     f = open(args_path, 'r')
     args = json.load(f)
     main(args)

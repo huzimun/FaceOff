@@ -12,7 +12,7 @@ python ./attack/faceoff.py \
     --data_dir "./datasets/pre_test" \
     --input_name "set_B" \
     --data_dir_for_target_max "./datasets/VGGFace2" \
-    --save_dir "./output/adversarial_images" \
+    --save_dir "./output/photomaker" \
     --model_type "photomaker_clip" \
     --pretrained_model_name_or_path "./pretrains/photomaker-v1.bin" \
     --target_type 'max' \

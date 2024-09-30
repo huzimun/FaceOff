@@ -1,43 +1,27 @@
-export adversarial_folder_name="photomaker_clip_pre_test_n_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
-                                
+# export adversarial_folder_name="photomaker_clip_mini-VGGFace2_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
+export adversarial_folder_name="photomaker_clip_mini-VGGFace2_x_num200_alpha6_eps16_input224_output224_max_refiner0"
+
 export dir_name=$adversarial_folder_name
-export adversarial_input_dir="./output/adversarial_images/${dir_name}"
-export customization_output_dir="./output/customization_outputs/photomaker/${dir_name}"
-export evaluation_output_dir="./output/evaluation_outputs/${dir_name}"
-export original_output_dir="./output/customization_outputs/photomaker/mini-VGGFace2/"
+export adversarial_input_dir="./output/photomaker/adversarial_images/${dir_name}"
+export customization_output_dir="./output/photomaker/customization_outputs/${dir_name}"
+export evaluation_output_dir="./output/photomaker/evaluation_outputs/${dir_name}"
+export original_output_dir="./output/photomaker/customization_outputs/mini-VGGFace2/"
 export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-export device="cuda:0"
+export device="cuda:3"
 export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 echo $prompts
 
-python ./attack/faceoff.py \
-    --device $device \
-    --prior_generation_precision "bf16" \
-    --loss_type "n" \
-    --attack_num 200 \
-    --alpha 6 \
-    --eps 16 \
-    --input_size 224 \
-    --output_size 224 \
-    --center_crop 1 \
-    --resample_interpolation 'BILINEAR' \
-    --data_dir "./datasets/pre_test" \
-    --input_name "set_B" \
-    --data_dir_for_target_max "./datasets/VGGFace2" \
-    --save_dir "./output/adversarial_images" \
-    --model_type "photomaker_clip" \
-    --pretrained_model_name_or_path "./pretrains/photomaker-v1.bin" \
-    --target_type 'max' \
-    --max_distance_json "./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json" \
-    --min_JND_eps_rate 0.75 \
-    --update_interval 40 \
-    --noise_budget_refiner 1 \
-    --blur_size 3 \
+# export save_config_dir="./output/photomaker/config_scripts_logs/${dir_name}"
+# mkdir $save_config_dir
+# cp "./scripts/attack_gen_eval.sh" $save_config_dir
+# cp "./args.json" $save_config_dir
+
+# python ./attack/faceoff.py --config_path "./args.json"
 
 python ./customization/target_model/PhotoMaker/inference.py \
-  --input_folders "./output/adversarial_images/${adversarial_folder_name}" \
-  --save_dir "./output/customization_outputs/photomaker/${adversarial_folder_name}" \
+  --input_folders "./output/photomaker/adversarial_images/${adversarial_folder_name}" \
+  --save_dir "./output/photomaker/customization_outputs/${adversarial_folder_name}" \
   --prompts "a photo of sks person;a dslr portrait of sks person" \
   --photomaker_ckpt "./pretrains/photomaker-v1.bin" \
   --base_model_path "./pretrains/RealVisXL_V3.0" \

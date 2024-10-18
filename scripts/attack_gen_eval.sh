@@ -1,5 +1,5 @@
-# export adversarial_folder_name="photomaker_clip_mini-VGGFace2_x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
-export adversarial_folder_name="photomaker_clip_mini-VGGFace2_x_num200_alpha6_eps16_input224_output224_max_refiner0"
+export adversarial_folder_name="photomaker_clip_mini-VGGFace2_d-x_num200_alpha6_eps16_input224_output224_max_refiner1_min-eps12"
+# export adversarial_folder_name="photomaker_clip_mini-VGGFace2_d-x_num200_alpha6_eps16_input224_output224_max_refiner0"
 
 export dir_name=$adversarial_folder_name
 export adversarial_input_dir="./output/photomaker/adversarial_images/${dir_name}"

@@ -1,10 +1,8 @@
 import torch
 import torch.nn.functional as F
 import clip
-import numpy as np
 import torchvision
 from torchvision import transforms
-import random
 import os
 from PIL import Image
 import json
@@ -18,6 +16,13 @@ from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
 from utils import read_json
 import shutil
+import random
+import numpy as np
+seed = 1
+random.seed(seed) # python的随机种子一样
+np.random.seed(seed) # numpy的随机种子一样
+torch.manual_seed(seed) # 为cpu设置随机种子
+torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 def pgd_attack_refiner(model,
                 model_type,
@@ -31,13 +36,16 @@ def pgd_attack_refiner(model,
                 trans,
                 min_JND_eps_rate,
                 update_interval,
-                noise_budget_refiner):
+                noise_budget_refiner,
+                weak_edge=200,
+                strong_edge=300,
+                mean_filter_size=3):
     if noise_budget_refiner == 1: # detect edge in original images
         JND = np.full(perturbed_data.shape, eps) # dynamic noise budget matrix
         ori_edges_list = []
         for ori_img in original_data:
             ori_img = ori_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-            edges = cv2.Canny(ori_img, 200, 300)
+            edges = cv2.Canny(ori_img, weak_edge, strong_edge)
             ori_edges_list.append(edges)
     with torch.no_grad():
         if loss_type == 'x': 
@@ -176,9 +184,9 @@ def pgd_attack_refiner(model,
                 if k != 0 and k % update_interval == 0:
                     for idx, adv_img in enumerate(perturbed_data):
                         adv_img = adv_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
-                        edges = cv2.Canny(adv_img, 200, 300) # edges in adversarial images
+                        edges = cv2.Canny(adv_img, weak_edge, strong_edge) # edges in adversarial images
                         edges = edges - ori_edges_list[idx]
-                        mean_filtered = cv2.blur(edges, (3, 3))
+                        mean_filtered = cv2.blur(edges, (mean_filter_size, mean_filter_size))
                         non_zero_indices = np.nonzero(mean_filtered) # non-zero positions
                         rows, cols = non_zero_indices[0], non_zero_indices[1]
                         for i in range(len(rows)):
@@ -270,10 +278,17 @@ def main(args):
         max_dist_dict = json.load(f)
     
     if args.noise_budget_refiner == 1:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) + '_output' + str(args.output_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) + '_min-eps'+ str(int(args.min_JND_eps_rate*args.eps))
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
+            + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
+            + '_output' + str(args.output_size) + '_' + args.target_type + '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) \
+            + '_filter' + str(args.mean_filter_size) + '_refiner' + str(args.noise_budget_refiner) \
+            + '_min-eps'+ str(int(args.min_JND_eps_rate*args.eps)) + '_interval' + str(args.update_interval)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     else:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) + '_output' + str(args.output_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
+            + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
+            + '_output' + str(args.output_size) + '_' + args.target_type + '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) \
+            + '_filter' + str(args.mean_filter_size) + '_refiner' + str(args.noise_budget_refiner)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
     for person_id in sorted(os.listdir(args.data_dir)):
@@ -303,22 +318,28 @@ def main(args):
                             all_trans,
                             args.min_JND_eps_rate,
                             args.update_interval,
-                            args.noise_budget_refiner)
+                            args.noise_budget_refiner,
+                            args.weak_edge,
+                            args.strong_edge,
+                            args.mean_filter_size)
         # save image
         savepath = os.path.join(save_folder, person_id)
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         save_image(savepath, person_folder, adv_data)
         # save loss
-        loss_save_path_list = []
-        for name in save_folder.split('/'):
-            if name == 'adversarial_images':
-                loss_save_path_list.append('config_scripts_logs')
-            else:
-                loss_save_path_list.append(name)
-        loss_save_path = ""
-        for name in loss_save_path_list:
-            loss_save_path = loss_save_path + name + '/'
+        # loss_save_path_list = []
+        # for name in save_folder.split('/'):
+        #     if name == 'adversarial_images':
+        #         loss_save_path_list.append('config_scripts_logs')
+        #     else:
+        #         loss_save_path_list.append(name)
+        loss_save_path = f"./output/photomaker/config_scripts_logs/{adv_image_dir_name}"
+        os.makedirs(loss_save_path, exist_ok=True)
+        # shutil.copy("./scripts/attack_gen_eval.sh", loss_save_path)
+        # shutil.copy("./args.json", loss_save_path)
+        # for name in loss_save_path_list:
+        #     loss_save_path = loss_save_path + name + '/'
         with open(os.path.join(loss_save_path, "all_loss.txt"), mode="a", encoding="utf-8") as f:
             f.write("Person_id: " + str(person_id) + '\n')
             for key in Loss_dict.keys():

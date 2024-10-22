@@ -34,7 +34,7 @@ def pgd_attack_refiner(model,
                 loss_type,
                 target_data,
                 trans,
-                min_eps,
+                min_JND_eps_rate,
                 update_interval,
                 noise_budget_refiner,
                 weak_edge=200,
@@ -191,7 +191,7 @@ def pgd_attack_refiner(model,
                         rows, cols = non_zero_indices[0], non_zero_indices[1]
                         for i in range(len(rows)):
                             for j in range(0, 3):
-                                JND[idx][j][rows[i], cols[i]] = max(JND[idx][j][rows[i], cols[i]] - 1, min_eps)
+                                JND[idx][j][rows[i], cols[i]] = max(JND[idx][j][rows[i], cols[i]] - 1, eps * min_JND_eps_rate)
                         print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
         grad = torch.autograd.grad(Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
@@ -264,8 +264,8 @@ def main(args):
         resample_interpolation = transforms.InterpolationMode.BICUBIC
         
     train_aug = [
-        transforms.Resize(args.model_input_size, interpolation=resample_interpolation),
-        transforms.CenterCrop(args.model_input_size) if args.center_crop else transforms.RandomCrop(args.model_input_size),
+        transforms.Resize(args.output_size, interpolation=resample_interpolation),
+        transforms.CenterCrop(args.output_size) if args.center_crop else transforms.RandomCrop(args.output_size),
     ]
     tensorize_and_normalize = [
         transforms.Normalize([0.5*255]*3,[0.5*255]*3),
@@ -280,14 +280,15 @@ def main(args):
     if args.noise_budget_refiner == 1:
         adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
-            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) \
-            +  '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) + '_filter' + str(args.mean_filter_size) \
-            + '_min-eps'+ str(args.min_eps) + '_interval' + str(args.update_interval)
+            + '_output' + str(args.output_size) + '_' + args.target_type + '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) \
+            + '_filter' + str(args.mean_filter_size) + '_refiner' + str(args.noise_budget_refiner) \
+            + '_min-eps'+ str(int(args.min_JND_eps_rate*args.eps)) + '_interval' + str(args.update_interval)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     else:
         adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
-            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
+            + '_output' + str(args.output_size) + '_' + args.target_type + '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) \
+            + '_filter' + str(args.mean_filter_size) + '_refiner' + str(args.noise_budget_refiner)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
     for person_id in sorted(os.listdir(args.data_dir)):
@@ -315,7 +316,7 @@ def main(args):
                             args.loss_type,
                             target_data,
                             all_trans,
-                            args.min_eps,
+                            args.min_JND_eps_rate,
                             args.update_interval,
                             args.noise_budget_refiner,
                             args.weak_edge,
@@ -326,193 +327,29 @@ def main(args):
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         save_image(savepath, person_folder, adv_data)
+        # save loss
+        # loss_save_path_list = []
+        # for name in save_folder.split('/'):
+        #     if name == 'adversarial_images':
+        #         loss_save_path_list.append('config_scripts_logs')
+        #     else:
+        #         loss_save_path_list.append(name)
         loss_save_path = f"./output/photomaker/config_scripts_logs/{adv_image_dir_name}"
         os.makedirs(loss_save_path, exist_ok=True)
+        # shutil.copy("./scripts/attack_gen_eval.sh", loss_save_path)
+        # shutil.copy("./args.json", loss_save_path)
+        # for name in loss_save_path_list:
+        #     loss_save_path = loss_save_path + name + '/'
         with open(os.path.join(loss_save_path, "all_loss.txt"), mode="a", encoding="utf-8") as f:
             f.write("Person_id: " + str(person_id) + '\n')
             for key in Loss_dict.keys():
                 f.write("Epoch: " + str(key) + ", Loss: " + str(Loss_dict[key]) + '\n')    
     return
 
-def parse_args(input_args=None):
-    parser = argparse.ArgumentParser(description="adversarial attacks for customization models")
-    parser.add_argument(
-        "--device",
-        type=str,
-        default="cuda",
-        required=True,
-        help="select a cuda",
-    )
-    parser.add_argument(
-        "--prior_generation_precision",
-        type=str,
-        default="bf16",
-        choices=["no", "fp32", "fp16", "bf16"],
-        help=(
-            "Choose prior generation precision between fp32, fp16 and bf16 (bfloat16). Bf16 requires PyTorch >="
-            " 1.10.and an Nvidia Ampere GPU.  Default to  fp16 if a GPU is available else fp32."
-        ),
-    )
-    parser.add_argument(
-        "--loss_type",
-        type=str,
-        default='x',
-        required=True,
-        help = "x means calculating the distance between images, n means calculating the distance between noises, d-x means updated n"
-    )
-    parser.add_argument(
-        "--attack_num",
-        type=int,
-        default=200,
-        required=True,
-        help = "attack number"
-    )
-    parser.add_argument(
-        "--alpha",
-        type=int,
-        default=6,
-        required=True,
-        help = "step size"
-    )
-    parser.add_argument(
-        "--eps",
-        type=int,
-        default=16,
-        required=True,
-        help = "noise budget"
-    )
-    parser.add_argument(
-        "--input_size",
-        type=int,
-        default=512,
-        required=True,
-        help = "adversarial image size"
-    )
-    parser.add_argument(
-        "--model_input_size",
-        type=int,
-        default=224,
-        required=True,
-        help = "model input image size"
-    )
-    parser.add_argument(
-        "--center_crop",
-        type=int,
-        default=1,
-        required=False,
-        help = "center crop or not"
-    )
-    parser.add_argument(
-        "--resample_interpolation",
-        type=str,
-        default='BILINEAR',
-        required=True,
-        help = "resample interpolation of resize, clip is BICUBIC"
-    )
-    parser.add_argument(
-        "--data_dir",
-        type=str,
-        default="./datasets/mini-VGGFace2",
-        required=True,
-        help = "path to clean images"
-    )
-    parser.add_argument(
-        "--input_name",
-        type=str,
-        default="set_B",
-        required=True,
-        help = "subfolder under data dir"
-    )
-    parser.add_argument(
-        "--data_dir_for_target_max",
-        type=str,
-        default="./datasets/VGGFace2",
-        required=False,
-        help = "path to all clean images"
-    )
-    parser.add_argument(
-        "--save_dir",
-        type=str,
-        default="./output/photomaker/adversarial_images",
-        required=True,
-        help = "save path"
-    )
-    parser.add_argument(
-        "--model_type",
-        type=str,
-        default='photomaker_clip',
-        required=True,
-        help = "vae, clip, ipadapter, photomaker_clip"
-    )
-    parser.add_argument(
-        "--pretrained_model_name_or_path",
-        type=str,
-        default="./pretrains/photomaker-v1.bin",
-        required=True,
-        help = "ViT-L/14, ./pretrains/photomaker-v1.bin, /home/humw/Pretrain/stable-diffusion-2-1-base"
-    )
-    parser.add_argument(
-        "--target_type",
-        type=str,
-        default='max',
-        required=True,
-        help = "target image choice, max means photomaker clip distance, yingbu means target opera make-up yingbu"
-    )
-    parser.add_argument(
-        "--max_distance_json",
-        type=str,
-        default="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json",
-        required=True,
-        help = "./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-    )
-    parser.add_argument(
-        "--mean_filter_size",
-        type=int,
-        default=3,
-        required=True,
-        help = "blur size in refiner"
-    )
-    parser.add_argument(
-        "--strong_edge",
-        type=int,
-        default=300,
-        required=True,
-        help = "strong edge threshold of edge detector"
-    )
-    parser.add_argument(
-        "--weak_edge",
-        type=int,
-        default=200,
-        required=True,
-        help = "weak edge threshold of edge detector"
-    )
-    parser.add_argument(
-        "--min_eps",
-        type=int,
-        default=12,
-        required=True,
-        help = "min_eps of refiner"
-    )
-    parser.add_argument(
-        "--update_interval",
-        type=int,
-        default=40,
-        required=True,
-        help = "update_interval"
-    )
-    parser.add_argument(
-        "--noise_budget_refiner",
-        type=int,
-        default=1,
-        required=True,
-        help = "with noise budget refiner"
-    )
-    if input_args is not None:
-        args = parser.parse_args(input_args)
-    else:
-        args = parser.parse_args()
-    return args
-
 if __name__ == "__main__":
-    args = parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_path', type=str, required=True, help='experiment configuration')
+    args = argparse.Namespace()
+    args.__dict__.update(read_json(parser.parse_args().config_path))
+    
     main(args)

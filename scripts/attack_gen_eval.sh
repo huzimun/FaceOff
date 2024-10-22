@@ -1,44 +1,84 @@
-export adversarial_folder_name="photomaker_clip_mini-VGGFace2_x_num100_alpha6_eps16_input224_output224_max_edge300-200_filter3_refiner0"
-# "photomaker_clip_mini-VGGFace2_x_num200_alpha6_eps16_input224_output224_max_edge300-200_filter3_refiner0"
-# "photomaker_clip_mini-VGGFace2_d-x_num100_alpha6_eps16_input224_output224_max_edge300-200_filter3_refiner1_min-eps12"
-
-export dir_name=$adversarial_folder_name
-export adversarial_input_dir="./output/photomaker/adversarial_images/${dir_name}"
-export customization_output_dir="./output/photomaker/customization_outputs/${dir_name}"
-export evaluation_output_dir="./output/photomaker/evaluation_outputs/${dir_name}"
+export model_type='photomaker_clip' # 攻击的模型，photomaker_clip，vae，clip，ipadapter
+export data_dir_name="mini-VGGFace2" # 输入数据集
+export loss_type='d-x' # 损失函数类型，x普通的target损失函数，n（原来错误的n)，d-x是更新后正确的n，d偏离损失函数
+export attack_num=100 # 攻击轮次
+export alpha=6 # 步长
+export eps=16 # 最大噪声阈值
+export min_eps=8 # refiner的最小噪声阈值
+export input_size=224 # 输入图片的尺寸
+export model_input_size=224 # 模型输入图片尺寸
+export target_type="max" # target图片的类型，max代表最大clip特征mse距离
+export strong_edge=200 # 边缘检测器的强边
+export weak_edge=100 # 边缘检测器的弱边
+export mean_filter_size=3 # 均值滤波器的尺寸
+export update_interval=10 # 阈值更新间隔
+export noise_budget_refiner=1 # 是否使用refiner
+export device="cuda:1"
+# echo $noise_budget_refiner
+if [ $noise_budget_refiner==1 ];then
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
+else
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
+fi
+echo $adversarial_folder_name
+export adversarial_input_dir="./output/photomaker/adversarial_images/${adversarial_folder_name}"
+export customization_output_dir="./output/photomaker/customization_outputs/${adversarial_folder_name}"
+export evaluation_output_dir="./output/photomaker/evaluation_outputs/${adversarial_folder_name}"
 export original_output_dir="./output/photomaker/customization_outputs/mini-VGGFace2/"
 export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-export device="cuda:5"
 export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 echo $prompts
 
-export save_config_dir="./output/photomaker/config_scripts_logs/${dir_name}"
+export save_config_dir="./output/photomaker/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
 cp "./scripts/attack_gen_eval.sh" $save_config_dir
-cp "./args.json" $save_config_dir
 
-python ./attack/faceoff.py --config_path "./args.json"
+# python ./attack/faceoff.py \
+#     --device $device \
+#     --prior_generation_precision "bf16" \
+#     --loss_type $loss_type \
+#     --attack_num $attack_num \
+#     --alpha $alpha \
+#     --eps $eps \
+#     --input_size $input_size \
+#     --model_input_size $model_input_size \
+#     --center_crop 1 \
+#     --resample_interpolation 'BILINEAR' \
+#     --data_dir "./datasets/${data_dir_name}" \
+#     --input_name "set_B" \
+#     --data_dir_for_target_max "./datasets/VGGFace2" \
+#     --save_dir "./output/photomaker/adversarial_images" \
+#     --model_type $model_type \
+#     --pretrained_model_name_or_path "./pretrains/photomaker-v1.bin" \
+#     --target_type $target_type \
+#     --max_distance_json "./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json" \
+#     --min_eps $min_eps \
+#     --update_interval $update_interval \
+#     --noise_budget_refiner $noise_budget_refiner \
+#     --mean_filter_size $mean_filter_size \
+#     --strong_edge $strong_edge \
+#     --weak_edge $weak_edge
 
-python ./customization/target_model/PhotoMaker/inference.py \
-  --input_folders "./output/photomaker/adversarial_images/${adversarial_folder_name}" \
-  --save_dir "./output/photomaker/customization_outputs/${adversarial_folder_name}" \
-  --prompts "a photo of sks person;a dslr portrait of sks person" \
-  --photomaker_ckpt "./pretrains/photomaker-v1.bin" \
-  --base_model_path "./pretrains/RealVisXL_V3.0" \
-  --device $device \
-  --seed 42 \
-  --num_steps 50 \
-  --style_strength_ratio 20 \
-  --num_images_per_prompt 4 \
-  --pre_test 0 \
-  --height 1024 \
-  --width 1024 \
-  --lora 0 \
-  --input_name "" \
-  --trigger_word "sks" \
-  --gaussian_filter 0 \
-  --hflip 0
+# python ./customization/target_model/PhotoMaker/inference.py \
+#   --input_folders "./output/photomaker/adversarial_images/${adversarial_folder_name}" \
+#   --save_dir "./output/photomaker/customization_outputs/${adversarial_folder_name}" \
+#   --prompts "a photo of sks person;a dslr portrait of sks person" \
+#   --photomaker_ckpt "./pretrains/photomaker-v1.bin" \
+#   --base_model_path "./pretrains/RealVisXL_V3.0" \
+#   --device $device \
+#   --seed 42 \
+#   --num_steps 50 \
+#   --style_strength_ratio 20 \
+#   --num_images_per_prompt 4 \
+#   --pre_test 0 \
+#   --height 1024 \
+#   --width 1024 \
+#   --lora 0 \
+#   --input_name "" \
+#   --trigger_word "sks" \
+#   --gaussian_filter 0 \
+#   --hflip 0
 
 # 1. IMS: protected output and original output
 # ArcFace
@@ -341,4 +381,4 @@ python ./evaluations/lpips/my_lpips.py \
     --scene2 "original_input" \
     --model_name_or_path "alex" \
     --device $device \
-    --resolution 224
+    --resolution $input_size

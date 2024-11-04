@@ -171,6 +171,7 @@ pretrains
 
 # customization models
 # customization
+!/customization/target_model/PhotoMaker
 
 # output
 output

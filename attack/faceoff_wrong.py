@@ -485,7 +485,7 @@ def main(args):
         perturbed_data = clean_data.to(dtype=torch_dtype).to(args.device).requires_grad_(True)
         target_data = target_data.to(args.device).requires_grad_(False)
         
-        adv_data, Loss_dict = pgd_attack_refiner(model,
+        adv_data, Loss_dict = pgd_attack_refiner_wrong(model,
                             args.model_type,
                             perturbed_data,
                             original_data,

@@ -1,41 +1,41 @@
-export model_type='photomaker_clip' # 攻击的模型，photomaker_clip，vae，clip，ipadapter
-export pretrained_model_name_or_path="./pretrains/photomaker-v1.bin"  # "./pretrains/photomaker-v1.bin"，'/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder'，'/home/humw/Pretrain/stable-diffusion-2-1-base'
+export model_type='ipadapter' # 攻击的模型，photomaker_clip，vae，clip，ipadapter
+export pretrained_model_name_or_path='/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder'  # "./pretrains/photomaker-v1.bin"，'/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder'，'/home/humw/Pretrain/stable-diffusion-2-1-base'
 export data_dir_name="mini-VGGFace2" # 输入数据集
 export loss_type='d-x' # 损失函数类型，x普通的target损失函数，n（原来错误的n)，d-x是更新后正确的n，d偏离损失函数
-export attack_num=100 # 攻击轮次
+export attack_num=200 # 攻击轮次
 export alpha=6 # 步长
 export eps=16 # 最大噪声阈值
-export min_eps=8 # refiner的最小噪声阈值
+export min_eps=12 # refiner的最小噪声阈值
 export input_size=512 # 输入图片的尺寸，对抗图片尺寸
 export model_input_size=224 # 模型输入图片尺寸
 export target_type="max" # target图片的类型，max代表最大clip特征mse距离
-export strong_edge=200 # 边缘检测器的强边
-export weak_edge=100 # 边缘检测器的弱边
+export strong_edge=300 # 边缘检测器的强边
+export weak_edge=200 # 边缘检测器的弱边
 export mean_filter_size=3 # 均值滤波器的尺寸
-export update_interval=10 # 阈值更新间隔
-export noise_budget_refiner=0 # 是否使用refiner
-export device="cuda:2"
-echo $noise_budget_refiner
-if [ $noise_budget_refiner == 1 ];then
+export update_interval=40 # 阈值更新间隔
+export noise_budget_refiner=1 # 是否使用refiner
+export device="cuda:4"
+# echo $noise_budget_refiner
+if [ $noise_budget_refiner==1 ];then
     export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
 else
     export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
 fi
 echo $adversarial_folder_name
-export adversarial_input_dir="./output/photomaker/adversarial_images/${adversarial_folder_name}"
-export customization_output_dir="./output/photomaker/customization_outputs/${adversarial_folder_name}"
-export evaluation_output_dir="./output/photomaker/evaluation_outputs/${adversarial_folder_name}"
-export original_output_dir="./output/photomaker/customization_outputs/mini-VGGFace2/"
+export adversarial_input_dir="./output/ipadapter/adversarial_images/${adversarial_folder_name}"
+export customization_output_dir="./output/ipadapter/customization_outputs/${adversarial_folder_name}"
+export evaluation_output_dir="./output/ipadapter/evaluation_outputs/${adversarial_folder_name}"
+export original_output_dir="./output/ipadapter/customization_outputs/mini-VGGFace2/"
 export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
+export prompts="a_photo_of_person;a_dslr_portrait_of_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 echo $prompts
 
-export save_config_dir="./output/photomaker/config_scripts_logs/${adversarial_folder_name}"
+export save_config_dir="./output/ipadapter/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
 cp "./scripts/attack_gen_eval.sh" $save_config_dir
 
-python ./attack/faceoff.py \
+python ./attack/faceoff_wrong.py \
     --device $device \
     --prior_generation_precision "bf16" \
     --loss_type $loss_type \
@@ -49,7 +49,7 @@ python ./attack/faceoff.py \
     --data_dir "./datasets/${data_dir_name}" \
     --input_name "set_B" \
     --data_dir_for_target_max $VGGFace2 \
-    --save_dir "./output/photomaker/adversarial_images" \
+    --save_dir "./output/ipadapter/adversarial_images" \
     --model_type $model_type \
     --pretrained_model_name_or_path $pretrained_model_name_or_path \
     --target_type $target_type \
@@ -61,26 +61,15 @@ python ./attack/faceoff.py \
     --strong_edge $strong_edge \
     --weak_edge $weak_edge
 
-# attack PhotoMaker
-python ./customization/target_model/PhotoMaker/inference.py \
-  --input_folders "./output/photomaker/adversarial_images/${adversarial_folder_name}" \
-  --save_dir "./output/photomaker/customization_outputs/${adversarial_folder_name}" \
-  --prompts "a photo of sks person;a dslr portrait of sks person" \
-  --photomaker_ckpt "./pretrains/photomaker-v1.bin" \
-  --base_model_path "./pretrains/RealVisXL_V3.0" \
-  --device $device \
-  --seed 42 \
-  --num_steps 50 \
-  --style_strength_ratio 20 \
-  --num_images_per_prompt 4 \
-  --pre_test 0 \
-  --height 1024 \
-  --width 1024 \
-  --lora 0 \
-  --input_name "" \
-  --trigger_word "sks" \
-  --gaussian_filter 0 \
-  --hflip 0
+# attack IP-Adapter
+python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
+    --base_model_path "/home/humw/Pretrain/RealVisXL_V3.0" \
+    --image_encoder_path "/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder" \
+    --ip_ckpt "/home/humw/Pretrain/h94/IP-Adapter/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.bin" \
+    --device $device \
+    --input_dir $adversarial_input_dir \
+    --output_dir $customization_output_dir \
+    --resolution 224
 
 # 1. IMS: protected output and original output
 # ArcFace
@@ -362,21 +351,21 @@ python ./evaluations/LIQE/run_liqe.py \
     --scene "protected_output" \
     --device $device
 # resize input images to 224x224
-# python ./evaluations/resize_to_224_image.py \
-#     --data_dir ${adversarial_input_dir} \
-#     --save_dir "${adversarial_input_dir}_224" \
-#     --sub_folder "" \
-#     --resolution 224
+python ./evaluations/resize_to_224_image.py \
+    --data_dir $adversarial_input_dir \
+    --save_dir "${adversarial_input_dir}_224" \
+    --sub_folder "" \
+    --resolution 224
 # protected input
 python ./evaluations/LIQE/run_liqe_for_input.py \
-    --data_dir $adversarial_input_dir \
+    --data_dir "${adversarial_input_dir}_224" \
     --sub_folder "" \
     --save_dir $evaluation_output_dir \
     --scene "protected_input" \
     --device $device
 # lpips: protected_input and original_input
 python ./evaluations/lpips/my_lpips.py \
-    --data_dir $adversarial_input_dir \
+    --data_dir "${adversarial_input_dir}_224" \
     --emb_dirs $VGGFace2 \
     --save_dir $evaluation_output_dir \
     --scene "protected_input" \

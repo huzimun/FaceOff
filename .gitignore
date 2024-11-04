@@ -170,7 +170,8 @@ pretrains
 *.h5
 
 # customization models
-customization
+# customization
+!/customization/target_model/PhotoMaker
 
 # output
 output

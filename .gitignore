@@ -170,7 +170,7 @@ pretrains
 *.h5
 
 # customization models
-customization
+# customization
 
 # output
 output

@@ -33,7 +33,7 @@ echo $prompts
 
 export save_config_dir="./output/photomaker/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
-cp "./scripts/attack_gen_eval.sh" $save_config_dir
+cp "./scripts/attack_gen_eval_photomaker.sh" $save_config_dir
 
 python ./attack/faceoff.py \
     --device $device \
@@ -72,7 +72,7 @@ python ./customization/target_model/PhotoMaker/inference.py \
   --seed 42 \
   --num_steps 50 \
   --style_strength_ratio 20 \
-  --num_images_per_prompt 4 \
+  --num_images_per_prompt 16 \
   --pre_test 0 \
   --height 1024 \
   --width 1024 \

@@ -105,11 +105,11 @@ def main(args):
         output_images1 = list()
         output_images2 = list()
         for image in images:
-            output_image = ip_model.generate(pil_image=image, num_samples=1, num_inference_steps=30, seed=42, prompt="a photo of person")
-            output_images1.append(output_image[0])
+            output_images = ip_model.generate(pil_image=image, num_samples=4, num_inference_steps=30, seed=42, prompt="a photo of person")
+            output_images1 += output_images
         for image in images:
-            output_image = ip_model.generate(pil_image=image, num_samples=1, num_inference_steps=30, seed=42, prompt="a dslr portrait of person")
-            output_images2.append(output_image[0])
+            output_images = ip_model.generate(pil_image=image, num_samples=4, num_inference_steps=30, seed=42, prompt="a dslr portrait of person")
+            output_images2 += output_images
         save_path = os.path.join(args.output_dir, person_id)
         os.makedirs(save_path, exist_ok=True)
         prompt1_path = "a_photo_of_person"

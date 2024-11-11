@@ -47,7 +47,6 @@ dependencies:
     - charset-normalizer==3.3.2
     - clarabel==0.9.0
     - click==8.1.7
-    - clip==1.0
     - cmake==3.30.0
     - colorama==0.4.6
     - coloredlogs==15.0.1

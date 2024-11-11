@@ -7,6 +7,7 @@ import argparse
 import pdb
 import json
 import torch.nn.functional as F
+import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser(description='IMS_clip evaluation')
@@ -19,7 +20,7 @@ def parse_args():
     parser.add_argument('--is_target', type=int, default=0, required=False, help='compare with target images')
     parser.add_argument('--map_path', type=str, default='', required=False, help='path of map json')
     parser.add_argument('--target_path', type=str, default='', required=False, help='path of target images')
-    parser.add_argument('--model_name_or_path', type=str, default="./evaluations/clip/ViT-B-32.pt", required=True, help='ViT-B/32')
+    parser.add_argument('--model_name_or_path', type=str, default="./evaluations/my_clip/ViT-B-32.pt", required=True, help='ViT-B/32')
     parser.add_argument('--device', type=str, default='cuda', required=True, help='cuda or cpu')
     parser.add_argument('--input_name', type=str, default='set_B', required=True, help='set_B or none')
     parser.add_argument('--out_out', type=int, default=0, required=False, help='calculate ims between protected output and original output')
@@ -81,11 +82,16 @@ def main():
             print("tmp_clip_list:{}".format(str(tmp_clip_list)))
             clip_list[k] = sum(tmp_clip_list) * 1.0 / len(tmp_clip_list)
     print("clip_list:{}".format(clip_list))
+    clip_list_data = np.array(clip_list)
+    clip_sample_std = np.std(clip_list_data, ddof=1)
     os.makedirs(args.save_dir, exist_ok=True)
     save_path = os.path.join(args.save_dir, args.scene + '_' + args.scene2 + '_' + 'CLIP' + '.txt')
     with open(save_path, 'w') as f:
+        f.write('CLIP IMS Mean\n')
         f.write(str(clip_list) + '\n')
         f.write(str(sum(clip_list) * 1.0 / len(clip_list)) + '\n')
+        f.write('CLIP IMS STD\n')
+        f.write(str(clip_sample_std) + '\n')
     return
             
 if __name__ == '__main__':

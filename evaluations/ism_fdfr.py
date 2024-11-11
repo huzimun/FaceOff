@@ -138,14 +138,20 @@ def main():
         ism_list[k] = sum(tmp_ism_list) * 1.0 / len(tmp_ism_list)
         fdr_list[k] = sum(tmp_fdr_list) * 1.0 / len(tmp_fdr_list)
     print("ism_list:{}".format(ism_list))
+    ism_list_data = np.array(ism_list)
+    ism_sample_std = np.std(ism_list_data, ddof=1)
     print("fdr_list:{}".format(fdr_list))
     os.makedirs(args.save_dir, exist_ok=True)
     save_path = os.path.join(args.save_dir, args.scene + '_' + args.scene2 + '_' + args.model_name + '.txt')
     with open(save_path, 'w') as f:
-        f.write(str(ism_list) + '\n')
-        f.write(str(sum(ism_list) * 1.0 / len(ism_list)) + '\n')
+        f.write('FDR Mean\n')
         f.write(str(fdr_list) + '\n')
         f.write(str(sum(fdr_list) * 1.0 / len(fdr_list)) + '\n')
+        f.write('ISM Mean\n')
+        f.write(str(ism_list) + '\n')
+        f.write(str(sum(ism_list) * 1.0 / len(ism_list)) + '\n')
+        f.write('ISM sample std\n')
+        f.write(str(ism_sample_std) + '\n')
     return
             
 if __name__ == '__main__':

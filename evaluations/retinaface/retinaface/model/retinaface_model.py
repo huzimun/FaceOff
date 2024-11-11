@@ -16,7 +16,7 @@ else:
 def load_weights(model):
 
     # home = str(os.getenv('DEEPFACE_HOME', default=Path.home()))
-    home = '/home/humw/Codes/FaceOff/evaluations/deepface/weights/'
+    home = '/data1/humw/Codes/Anti-DreamBooth/evaluations/deepface/weights/'
     exact_file = home+'retinaface.h5'
     #url = 'https://drive.google.com/file/d/1K3Eq2k1b9dpKkucZjPAiCCnNzfCMosK4'
     #url = 'https://drive.google.com/uc?id=1K3Eq2k1b9dpKkucZjPAiCCnNzfCMosK4'

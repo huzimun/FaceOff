@@ -1,5 +1,3 @@
-test
-
 ## FDFR and ISM
 Set up env for FDFR and ISM. Firstly, we need to `cd evalutions` and install the following library:
 

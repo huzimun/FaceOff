@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument('--sub_folder', type=str, default='', required=False, help='set_B or none')
     parser.add_argument('--scene', type=str, default='perturbed_input', required=False, help='choose perturbed_output or original_output')
     parser.add_argument('--scene2', type=str, default='original_input', required=False, help='the other folder name')
-    parser.add_argument('--model_name_or_path', type=str, default="/home/humw/Codes/FaceOff/evaluations/clip/ViT-B-32.pt", required=True, help='ViT-B/32')
+    parser.add_argument('--model_name_or_path', type=str, default="", required=True, help='ViT-B/32')
     parser.add_argument('--resolution', type=int, default=224, required=True, help='512 or 224')
     parser.add_argument('--device', type=str, default='cuda', required=True, help='cuda or cpu')
     args = parser.parse_args()

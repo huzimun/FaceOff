@@ -1,7 +1,7 @@
 export model_type='ipadapter' # 攻击的模型，photomaker_clip，vae，clip，ipadapter
 export pretrained_model_name_or_path='/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder'  # "./pretrains/photomaker-v1.bin"，'/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder'，'/home/humw/Pretrain/stable-diffusion-2-1-base'
-export data_dir_name="mini-VGGFace2" # 输入数据集
-export loss_type='d-x' # 损失函数类型，x普通的target损失函数，n（原来错误的n)，d-x是更新后正确的n，d偏离损失函数
+export data_dir_name="VGGFace2" # 输入数据集
+export w=0.5 # w=0, x; w=1, d; (1-w) * Ltgt + w * Ldevite
 export attack_num=100 # 攻击轮次
 export alpha=6 # 步长
 export eps=16 # 最大噪声阈值
@@ -17,28 +17,28 @@ export noise_budget_refiner=1 # 是否使用refiner
 export device="cuda:2"
 # echo $noise_budget_refiner
 if [ $noise_budget_refiner==1 ];then
-    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
+    export adversarial_folder_name="${model_type}_${data_dir_name}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
 else
-    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_type}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
+    export adversarial_folder_name="${model_type}_${data_dir_name}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
 fi
 echo $adversarial_folder_name
-export adversarial_input_dir="./output/ipadapter/adversarial_images/${adversarial_folder_name}"
-export customization_output_dir="./output/ipadapter/customization_outputs/${adversarial_folder_name}"
-export evaluation_output_dir="./output/ipadapter/evaluation_outputs/${adversarial_folder_name}"
-export original_output_dir="./output/ipadapter/customization_outputs/mini-VGGFace2/"
+export adversarial_input_dir="./outputs/ipadapter/adversarial_images/${adversarial_folder_name}"
+export customization_output_dir="./outputs/ipadapter/customization_outputs/${adversarial_folder_name}"
+export evaluation_output_dir="./outputs/ipadapter/evaluation_outputs/${adversarial_folder_name}"
+export original_output_dir="./outputs/ipadapter/customization_outputs/mini-VGGFace2/"
 export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
 export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 echo $prompts
 
-export save_config_dir="./output/ipadapter/config_scripts_logs/${adversarial_folder_name}"
+export save_config_dir="./outputs/ipadapter/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
 cp "./scripts/attack_gen_eval_ip-adapter.sh" $save_config_dir
 
 python ./attack/faceoff.py \
     --device $device \
     --prior_generation_precision "bf16" \
-    --loss_type $loss_type \
+    --w $w \
     --attack_num $attack_num \
     --alpha $alpha \
     --eps $eps \
@@ -49,7 +49,7 @@ python ./attack/faceoff.py \
     --data_dir "./datasets/${data_dir_name}" \
     --input_name "set_B" \
     --data_dir_for_target_max $VGGFace2 \
-    --save_dir "./output/ipadapter/adversarial_images" \
+    --save_dir "./outputs/ipadapter/adversarial_images" \
     --model_type $model_type \
     --pretrained_model_name_or_path $pretrained_model_name_or_path \
     --target_type $target_type \
@@ -63,7 +63,7 @@ python ./attack/faceoff.py \
 
 # attack IP-Adapter
 python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
-    --base_model_path "/home/humw/Pretrain/RealVisXL_V3.0" \
+    --base_model_path "./pretrains/stable-diffusion-xl-base-1.0" \
     --image_encoder_path "/home/humw/Pretrain/h94/IP-Adapter/models/image_encoder" \
     --ip_ckpt "/home/humw/Pretrain/h94/IP-Adapter/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.bin" \
     --device $device \

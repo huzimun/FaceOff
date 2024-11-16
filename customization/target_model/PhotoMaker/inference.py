@@ -245,10 +245,13 @@ def main(args):
             prompt_name = prompt.replace(' ', '_')
             save_folder = os.path.join(args.save_dir, person_id_name, prompt_name)
             os.makedirs(save_folder, exist_ok=True)
-            img_names = [str(instance_path).split("/")[-1] for instance_path in image_path_list]
-            for img_pixel, img_name in zip(images, img_names):
-                save_path = os.path.join(save_folder, img_name)
-                img_pixel.save(save_path)
+            # img_names = [str(instance_path).split("/")[-1] for instance_path in image_path_list]
+            # for img_pixel, img_name in zip(images, img_names):
+            #     save_path = os.path.join(save_folder, img_name)
+            #     img_pixel.save(save_path)
+            for idx, image in enumerate(images):
+                save_path = os.path.join(save_folder, f"{i}_{idx}.png")
+                image.save(save_path)
     del pipe
 
 if __name__ == "__main__":

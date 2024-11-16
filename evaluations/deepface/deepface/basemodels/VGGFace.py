@@ -91,7 +91,7 @@ def loadModel(
 
     # -----------------------------------
 
-    home = '/data1/humw/Codes/Anti-DreamBooth/evaluations/deepface/weights/'
+    home = '/data1/humw/Pretrains/'
     output = home + "vgg_face_weights.h5"
 
     if os.path.isfile(output) != True:

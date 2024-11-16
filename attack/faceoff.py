@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import clip
-import torchvision
 from torchvision import transforms
 import os
 from PIL import Image
@@ -14,10 +13,10 @@ import pdb
 import cv2
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
-from utils import read_json
-import shutil
 import random
 import numpy as np
+import time
+
 seed = 1
 random.seed(seed) # python的随机种子一样
 np.random.seed(seed) # numpy的随机种子一样
@@ -32,12 +31,12 @@ def pgd_attack_refiner(model,
                 alpha,
                 eps,
                 attack_num,
-                loss_type,
                 target_data,
                 trans,
                 min_eps,
                 update_interval,
                 noise_budget_refiner,
+                w=0,
                 weak_edge=200,
                 strong_edge=300,
                 mean_filter_size=3):
@@ -49,7 +48,7 @@ def pgd_attack_refiner(model,
             edges = cv2.Canny(ori_img, weak_edge, strong_edge)
             ori_edges_list.append(edges)
     with torch.no_grad():
-        if loss_type == 'x': 
+        if w == 0: # loss_type == 'x'
             tran_target = trans(target_data)
             if model_type == 'vae':
                 target_image_embeds = model.encode(tran_target).latent_dist.sample() * model.config.scaling_factor
@@ -61,44 +60,11 @@ def pgd_attack_refiner(model,
                 target_image_embeds = model(tran_target, output_hidden_states=True).hidden_states[-2]
             else:
                 raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
-        elif loss_type == 'n':
-            original_data.requires_grad_(False)
-            target_data.requires_grad_(False)
-            tran_target_data = trans(target_data)
-            tran_original_data = trans(original_data)
-            if model_type == 'vae':
-                target_embeds = model.encode(tran_target_data).latent_dist.sample() * model.config.scaling_factor
-                ori_embeds = model.encode(tran_original_data).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'photomaker_clip':
-                target_embeds = model(tran_target_data)
-                ori_embeds = model(tran_original_data)
-            elif model_type == 'clip':
-                target_embeds = model.encode_image(tran_target_data)
-                ori_embeds = model.encode_image(tran_original_data)
-            elif model_type == 'ipadapter':
-                target_embeds = model(tran_target_data, output_hidden_states=True).hidden_states[-2]
-                ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
-            else:
-                raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
-            target_embeds_noise = target_embeds - ori_embeds # target noise embeddings
-        elif loss_type == 'd': # deviate loss
+        elif w > 0 and w < 1:
             original_data.requires_grad_(False)
             tran_original_data = trans(original_data)
-            perturbed_data = perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)
-            if model_type == 'vae':
-                ori_embeds = model.encode(tran_original_data).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'photomaker_clip':
-                ori_embeds = model(tran_original_data)
-            elif model_type == 'clip':
-                ori_embeds = model.encode_image(tran_original_data)
-            elif model_type == 'ipadapter':
-                ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
-            else:
-                raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
-        elif loss_type == 'd-x':
-            original_data.requires_grad_(False)
-            tran_original_data = trans(original_data)
-            perturbed_data = perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)
+            d_type = perturbed_data.dtype
+            perturbed_data = (perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)).to(d_type)
             tran_target = trans(target_data)
             if model_type == 'vae':
                 target_image_embeds = model.encode(tran_target).latent_dist.sample() * model.config.scaling_factor
@@ -111,16 +77,31 @@ def pgd_attack_refiner(model,
                 ori_embeds = model.encode_image(tran_original_data)
             elif model_type == 'ipadapter':
                 target_image_embeds = model(tran_target, output_hidden_states=True).hidden_states[-2]
+                ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
+            else:
+                raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
+        elif w == 1: # loss_type == 'd'
+            original_data.requires_grad_(False)
+            tran_original_data = trans(original_data)
+            d_type = perturbed_data.dtype
+            perturbed_data = (perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)).to(d_type)
+            if model_type == 'vae':
+                ori_embeds = model.encode(tran_original_data).latent_dist.sample() * model.config.scaling_factor
+            elif model_type == 'photomaker_clip':
+                ori_embeds = model(tran_original_data)
+            elif model_type == 'clip':
+                ori_embeds = model.encode_image(tran_original_data)
+            elif model_type == 'ipadapter':
                 ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
             else:
                 raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
         else:
-            raise ValueError('loss type must be one of x, n, d, and d_x')
+            raise ValueError('w must be in [0, 1]')
     Loss_dict = {}
     for k in range(0, attack_num):
         perturbed_data.requires_grad_()
         tran_perturbed_data = trans(perturbed_data)
-        if loss_type == 'x':
+        if w == 0: # loss_type == 'x'
             if model_type == 'vae':
                 adv_image_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
             elif model_type == 'clip':
@@ -131,21 +112,8 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss = 1 - F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-        elif loss_type == 'n':
-            if model_type == 'vae':
-                tmp_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'photomaker_clip':
-                tmp_embeds = model(tran_perturbed_data)
-            elif model_type == 'clip':
-                tmp_embeds = model.encode_image(tran_perturbed_data)
-            elif model_type == 'ipadapter':
-                tmp_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
-            else:
-                raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            adv_embeds_noise = tmp_embeds - ori_embeds # target semantic difference
-            Loss = 1 - F.cosine_similarity(adv_embeds_noise, target_embeds_noise, -1).mean()
-        elif loss_type == 'd': # deviate loss
+            Loss = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+        elif w == 1: # loss_type == 'd'
             if model_type == 'vae':
                 adv_image_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
             elif model_type == 'photomaker_clip':
@@ -156,8 +124,8 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss = 1 + F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
-        elif loss_type == 'd-x':
+            Loss = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+        elif w > 0 and w < 1:
             if model_type == 'vae':
                 adv_image_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
             elif model_type == 'photomaker_clip':
@@ -168,15 +136,15 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss_x = 1 - F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-            Loss_d = 1 + F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+            Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+            Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             w = 1
-            Loss = Loss_x + w * Loss_d # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
+            Loss = (1 - w) * Loss_x + w * Loss_d # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
         else:
-            raise ValueError('loss type must be one of x, n, and d')
+            raise ValueError('w must be in [0, 1]')
         # save loss
-        if loss_type == 'd-x':
-             Loss_dict[k] = [Loss.item(), Loss_x.item(), Loss_d.item()]
+        if w > 0 and w < 1:
+            Loss_dict[k] = [Loss.item(), Loss_x.item(), Loss_d.item()]
         else:
             Loss_dict[k] = Loss.item()
         if k % 10 == 0:
@@ -245,6 +213,8 @@ def main(args):
         torch_dtype = torch.float16
     elif args.prior_generation_precision == "bf16":
         torch_dtype = torch.bfloat16
+    else:
+        raise ValueError("prior_generation_precision must be one of [fp32, fp16, bf16]")
         
     if args.model_type == 'clip':
         model, _ = clip.load(args.pretrained_model_name_or_path, device=args.device)
@@ -275,18 +245,15 @@ def main(args):
     all_trans = transforms.Compose(all_trans)
     print("all_trans:{}".format(all_trans))
     
-    with open(args.max_distance_json, "r", encoding="utf-8") as f:
-        max_dist_dict = json.load(f)
-    
     if args.noise_budget_refiner == 1:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
             + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) \
             +  '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) + '_filter' + str(args.mean_filter_size) \
             + '_min-eps'+ str(args.min_eps) + '_interval' + str(args.update_interval)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     else:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_type + '_num' \
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
             + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
@@ -296,10 +263,14 @@ def main(args):
         clean_data = load_data(person_folder, args.input_size, resampling[args.resample_interpolation])
         
         if args.target_type == 'max':
+            with open(args.max_distance_json, "r", encoding="utf-8") as f:
+                max_dist_dict = json.load(f)
             target_folder_name = max_dist_dict[person_id]
             targeted_image_folder = os.path.join(args.data_dir_for_target_max, target_folder_name, args.input_name)
         elif args.target_type == 'yingbu':
             targeted_image_folder = './target_images/yingbu'
+        elif args.target_type == 'mist':
+            targeted_image_folder = './target_images/mist'
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
         
         original_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)
@@ -313,12 +284,12 @@ def main(args):
                             args.alpha,
                             args.eps,
                             args.attack_num,
-                            args.loss_type,
                             target_data,
                             all_trans,
                             args.min_eps,
                             args.update_interval,
                             args.noise_budget_refiner,
+                            args.w,
                             args.weak_edge,
                             args.strong_edge,
                             args.mean_filter_size)
@@ -327,7 +298,7 @@ def main(args):
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         save_image(savepath, person_folder, adv_data)
-        loss_save_path = f"./output/photomaker/config_scripts_logs/{adv_image_dir_name}"
+        loss_save_path = f"./outputs/config_scripts_logs/{adv_image_dir_name}"
         os.makedirs(loss_save_path, exist_ok=True)
         with open(os.path.join(loss_save_path, "all_loss.txt"), mode="a", encoding="utf-8") as f:
             f.write("Person_id: " + str(person_id) + '\n')
@@ -355,18 +326,18 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
-        "--loss_type",
-        type=str,
-        default='x',
-        required=True,
-        help = "x means calculating the distance between images, n means calculating the distance between noises, d-x means updated n"
-    )
-    parser.add_argument(
         "--attack_num",
         type=int,
         default=200,
         required=True,
         help = "attack number"
+    )
+    parser.add_argument(
+        "--w",
+        type=float,
+        default=0.5,
+        required=True,
+        help = "w is used to adapt Targeted Loss and Deviation Loss"
     )
     parser.add_argument(
         "--alpha",
@@ -434,7 +405,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--save_dir",
         type=str,
-        default="./output/photomaker/adversarial_images",
+        default="./outputs/photomaker/adversarial_images",
         required=True,
         help = "save path"
     )
@@ -516,4 +487,7 @@ def parse_args(input_args=None):
 
 if __name__ == "__main__":
     args = parse_args()
+    t1 = time.time()
     main(args)
+    t2 = time.time()
+    print('TIME COST: %.6f'%(t2-t1))

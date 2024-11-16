@@ -64,7 +64,7 @@ def loadModel(
     # ---------------------------------------
     # check the availability of pre-trained weights
 
-    home = '/data1/humw/Codes/Anti-DreamBooth/evaluations/deepface/weights/'
+    home = '/data1/humw/Pretrains/'
 
     file_name = "arcface_weights.h5"
     output = home + file_name

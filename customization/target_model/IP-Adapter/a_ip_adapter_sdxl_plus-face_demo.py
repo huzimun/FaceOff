@@ -5,6 +5,8 @@ from ip_adapter import IPAdapterPlusXL
 from ip_adapter.custom_pipelines import StableDiffusionXLCustomPipeline
 from pathlib import Path
 import argparse
+from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusionInpaintPipelineLegacy, DDIMScheduler, AutoencoderKL
+from ip_adapter import IPAdapterPlus
 
 def load_data(data_dir, image_size=224, resample=2):
     import numpy as np
@@ -23,6 +25,13 @@ def load_data(data_dir, image_size=224, resample=2):
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Simple example for white-box attack")
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default="sd15",
+        required=True,
+        help="sd15 or sdxl",
+    )
     parser.add_argument(
         "--device",
         type=str,
@@ -59,6 +68,13 @@ def parse_args(input_args=None):
         help = "ip ckpt"
     )
     parser.add_argument(
+        "--vae_model_path",
+        type=str,
+        default="/data1/humw/Pretrains/sd-vae-ft-mse",
+        required=False,
+        help = "vae_model_path"
+    )
+    parser.add_argument(
         "--input_dir",
         type=str,
         default="/home/humw/Codes/FaceOff/output/Exp1/ipadapter/min-VGGFace2_ipadapter_out-224_no-mid-size_loss-n-mse_alpha6_eps16_num200_pre-test",
@@ -79,7 +95,13 @@ def parse_args(input_args=None):
         required=False,
         help = "image resolution of target model, clip is 224"
     )
-
+    parser.add_argument(
+        "--prior_generation_precision",
+        type=str,
+        default="bf16",
+        required=False,
+        help = "bf16 is torch.bfloat16"
+    )
     if input_args is not None:
         args = parser.parse_args(input_args)
     else:
@@ -88,15 +110,50 @@ def parse_args(input_args=None):
 
 def main(args):
     print(args)
-    # load SDXL pipeline
-    pipe = StableDiffusionXLCustomPipeline.from_pretrained(
-        args.base_model_path,
-        torch_dtype=torch.float16,
-        add_watermarker=False,
-    )
+    if args.prior_generation_precision == "fp32":
+        torch_dtype = torch.float32
+    elif args.prior_generation_precision == "fp16":
+        torch_dtype = torch.float16
+    elif args.prior_generation_precision == "bf16":
+        torch_dtype = torch.bfloat16
+    else:
+        raise ValueError("prior_generation_precision must be one of [fp32, fp16, bf16]")
+    
+    if args.model_type == 'sdxl':
+        # load SDXL pipeline
+        pipe = StableDiffusionXLCustomPipeline.from_pretrained(
+            args.base_model_path,
+            torch_dtype=torch_dtype,
+            add_watermarker=False,
+        )
+        # load ip-adapter
+        ip_model = IPAdapterPlusXL(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
+    elif args.model_type == 'sd15':
+        noise_scheduler = DDIMScheduler(
+            num_train_timesteps=1000,
+            beta_start=0.00085,
+            beta_end=0.012,
+            beta_schedule="scaled_linear",
+            clip_sample=False,
+            set_alpha_to_one=False,
+            steps_offset=1,
+        )
+        vae = AutoencoderKL.from_pretrained(args.vae_model_path).to(dtype=torch_dtype)
+        # load SD pipeline
+        pipe = StableDiffusionPipeline.from_pretrained(
+            args.base_model_path,
+            torch_dtype=torch_dtype,
+            scheduler=noise_scheduler,
+            vae=vae,
+            feature_extractor=None,
+            safety_checker=None
+        )
+        # load ip-adapter
+        ip_model = IPAdapterPlus(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
+    else:
+        raise ValueError("model_type must be sd15 or sdxl")
 
-    # load ip-adapter
-    ip_model = IPAdapterPlusXL(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
+    
     for person_id in sorted(os.listdir(args.input_dir)):
         print(person_id)
         person_dir = os.path.join(args.input_dir, person_id + "/" + args.sub_name)

@@ -174,7 +174,7 @@ pretrains
 !/customization/target_model/PhotoMaker
 
 # output
-output
+outputs
 
 # target images
 target_images

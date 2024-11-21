@@ -13,6 +13,7 @@ import pdb
 import cv2
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
+from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
 import random
 import numpy as np
 import time
@@ -58,6 +59,8 @@ def pgd_attack_refiner(model,
                 target_image_embeds = model(tran_target)
             elif model_type == 'ipadapter':
                 target_image_embeds = model(tran_target, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                target_image_embeds = model(tran_target.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
         elif w > 0 and w < 1:
@@ -78,6 +81,9 @@ def pgd_attack_refiner(model,
             elif model_type == 'ipadapter':
                 target_image_embeds = model(tran_target, output_hidden_states=True).hidden_states[-2]
                 ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                target_image_embeds = model(tran_target.unsqueeze(0))
+                ori_embeds = model(tran_original_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
         elif w == 1: # loss_type == 'd'
@@ -93,6 +99,8 @@ def pgd_attack_refiner(model,
                 ori_embeds = model.encode_image(tran_original_data)
             elif model_type == 'ipadapter':
                 ori_embeds = model(tran_original_data, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                ori_embeds = model(tran_original_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, and photomaker_clip')
         else:
@@ -110,6 +118,8 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data)
             elif model_type == 'ipadapter':
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
             Loss = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
@@ -122,6 +132,8 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model.encode_image(tran_perturbed_data)
             elif model_type == 'ipadapter':
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
             Loss = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
@@ -134,6 +146,8 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model.encode_image(tran_perturbed_data)
             elif model_type == 'ipadapter':
                 adv_image_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
+            elif model_type == 'face_diffuser':
+                adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
             Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
@@ -228,7 +242,11 @@ def main(args):
         model.to(args.device, dtype=torch_dtype)
     elif args.model_type == 'ipadapter':
         model = CLIPVisionModelWithProjection.from_pretrained(args.pretrained_model_name_or_path).to(args.device, dtype=torch_dtype)
-
+    elif args.model_type == "face_diffuser":
+        model = FaceDiffuserCLIPImageEncoder.from_pretrained(args.pretrained_model_name_or_path,).to(args.device, dtype=torch_dtype)
+    else:
+        raise ValueError("model_type out of range")
+    
     if args.resample_interpolation == 'BILINEAR':
         resample_interpolation = transforms.InterpolationMode.BILINEAR
     else:
@@ -271,6 +289,8 @@ def main(args):
             targeted_image_folder = './target_images/yingbu'
         elif args.target_type == 'mist':
             targeted_image_folder = './target_images/mist'
+        elif args.target_type == 'gray':
+            targeted_image_folder = './target_images/gray'
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
         
         original_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)

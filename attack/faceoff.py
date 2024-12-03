@@ -17,7 +17,7 @@ from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
 import random
 import numpy as np
 import time
-
+import math
 seed = 1
 random.seed(seed) # python的随机种子一样
 np.random.seed(seed) # numpy的随机种子一样
@@ -37,6 +37,7 @@ def pgd_attack_refiner(model,
                 min_eps,
                 update_interval,
                 noise_budget_refiner,
+                loss_choice,
                 w=0,
                 weak_edge=200,
                 strong_edge=300,
@@ -122,7 +123,12 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+            if loss_choice == 'mse':
+                Loss = F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
+            elif loss_choice == 'cosine':
+                Loss = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+            else:
+                raise ValueError('Loss choice must be one of mse or cosine')
         elif w == 1: # loss_type == 'd'
             if model_type == 'vae':
                 adv_image_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
@@ -136,7 +142,12 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+            if loss_choice == 'mse':
+                Loss = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
+            elif loss_choice == 'cosine':
+                Loss = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+            else:
+                raise ValueError('Loss choice must be one of mse or cosine')
         elif w > 0 and w < 1:
             if model_type == 'vae':
                 adv_image_embeds = model.encode(tran_perturbed_data).latent_dist.sample() * model.config.scaling_factor
@@ -150,9 +161,14 @@ def pgd_attack_refiner(model,
                 adv_image_embeds = model(tran_perturbed_data.unsqueeze(0))
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker_clip')
-            Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-            Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
-            w = 1
+            if loss_choice == 'mse':
+                Loss_x = F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
+                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
+            elif loss_choice == 'cosine':
+                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+            else:
+                raise ValueError('Loss choice must be one of mse or cosine')
             Loss = (1 - w) * Loss_x + w * Loss_d # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
         else:
             raise ValueError('w must be in [0, 1]')
@@ -164,6 +180,7 @@ def pgd_attack_refiner(model,
         if k % 10 == 0:
             print("k:{} th, Loss:{}".format(k, Loss))
             if noise_budget_refiner == 1:
+                drop_value = math.floor((eps - min_eps) / (attack_num / update_interval - 2)) # 1 = (16 -8) / (100 / 10 - 2); 1 = (16 - 12) / (50 / 10 - 2); 2 = (16 - 8) / (50 / 10 -2)
                 if k != 0 and k % update_interval == 0:
                     for idx, adv_img in enumerate(perturbed_data):
                         adv_img = adv_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
@@ -174,7 +191,7 @@ def pgd_attack_refiner(model,
                         rows, cols = non_zero_indices[0], non_zero_indices[1]
                         for i in range(len(rows)):
                             for j in range(0, 3):
-                                JND[idx][j][rows[i], cols[i]] = max(JND[idx][j][rows[i], cols[i]] - 1, min_eps)
+                                JND[idx][j][rows[i], cols[i]] = max(JND[idx][j][rows[i], cols[i]] - drop_value, min_eps)
                         print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
         grad = torch.autograd.grad(Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
@@ -264,14 +281,14 @@ def main(args):
     print("all_trans:{}".format(all_trans))
     
     if args.noise_budget_refiner == 1:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_w' + str(args.w) + '_num' \
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_choice + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
             + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) \
             +  '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) + '_filter' + str(args.mean_filter_size) \
             + '_min-eps'+ str(args.min_eps) + '_interval' + str(args.update_interval)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     else:
-        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_w' + str(args.w) + '_num' \
+        adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_choice + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
             + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
@@ -289,6 +306,8 @@ def main(args):
             targeted_image_folder = './target_images/yingbu'
         elif args.target_type == 'mist':
             targeted_image_folder = './target_images/mist'
+        elif args.target_type == 'colored_mist':
+            targeted_image_folder = './target_images/colored_mist'
         elif args.target_type == 'gray':
             targeted_image_folder = './target_images/gray'
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
@@ -309,6 +328,7 @@ def main(args):
                             args.min_eps,
                             args.update_interval,
                             args.noise_budget_refiner,
+                            args.loss_choice,
                             args.w,
                             args.weak_edge,
                             args.strong_edge,
@@ -351,6 +371,13 @@ def parse_args(input_args=None):
         default=200,
         required=True,
         help = "attack number"
+    )
+    parser.add_argument(
+        "--loss_choice",
+        type=str,
+        default="cosine",
+        required=True,
+        help = "cosine or mse"
     )
     parser.add_argument(
         "--w",
@@ -511,3 +538,5 @@ if __name__ == "__main__":
     main(args)
     t2 = time.time()
     print('TIME COST: %.6f'%(t2-t1))
+    with open(file="time_costs.txt", mode='a') as f:
+        f.write(str(t2-t1) + '\n')

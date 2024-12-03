@@ -7,6 +7,7 @@ from diffusers import StableDiffusionUpscalePipeline
 from PIL import Image
 from pathlib import Path
 import argparse
+import mosek
 
 def jpeg_compress_image(image: Image.Image, quality: int = 75) -> Image.Image:
     """
@@ -55,7 +56,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--sr_model_path",
         type=str,
-        default='/Pretrain/stable-diffusion-x4-upscaler',
+        default='/data1/humw/Pretrains/stable-diffusion-x4-upscaler',
         required=True,
         help="sr_model_path",
     )

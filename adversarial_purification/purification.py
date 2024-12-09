@@ -8,6 +8,7 @@ from PIL import Image
 from pathlib import Path
 import argparse
 import mosek
+import time
 
 def jpeg_compress_image(image: Image.Image, quality: int = 75) -> Image.Image:
     """
@@ -198,5 +199,12 @@ def main(args):
             torch.cuda.empty_cache()
             
 if __name__ == "__main__":
+    # args = parse_args()
+    # main(args)
     args = parse_args()
+    t1 = time.time()
     main(args)
+    t2 = time.time()
+    print('TIME COST: %.6f'%(t2-t1))
+    with open(file="time_costs.txt", mode='a') as f:
+        f.write(str(t2-t1) + '\n')

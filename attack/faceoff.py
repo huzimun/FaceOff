@@ -37,18 +37,39 @@ def pgd_attack_refiner(model,
                 min_eps,
                 update_interval,
                 noise_budget_refiner,
+                refiner_type,
                 loss_choice,
                 w=0,
                 weak_edge=200,
                 strong_edge=300,
                 mean_filter_size=3):
     if noise_budget_refiner == 1: # detect edge in original images
-        JND = np.full(perturbed_data.shape, eps) # dynamic noise budget matrix
         ori_edges_list = []
         for ori_img in original_data:
             ori_img = ori_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
             edges = cv2.Canny(ori_img, weak_edge, strong_edge)
             ori_edges_list.append(edges)
+        # 如果refiner_type为pre，则将JND矩阵在ori_edges_list中的对应3*3均值滤波矩阵区域以外置为min_eps，在扰动过程中，JND保持不变
+        if refiner_type == 'pre':
+            print("refiner_type: pre")
+            JND = np.full(perturbed_data.shape, min_eps) # dynamic noise budget matrix，非边缘区域，加弱噪声
+            for idx, edges in enumerate(ori_edges_list): # 遍历perturbed_data中的每一个图片的边缘矩阵
+                mean_filtered = cv2.blur(edges, (mean_filter_size, mean_filter_size)) # 3*3均值滤波矩阵获取边缘区域
+                non_zero_indices = np.nonzero(mean_filtered) # non-zero positions，即边缘区域，加强噪声
+                rows, cols = non_zero_indices[0], non_zero_indices[1]
+                # 所有的边缘区域，都加强噪声，eps
+                for i in range(len(rows)):
+                    for j in range(0, 3):
+                        JND[idx][j][rows[i], cols[i]] = eps
+        # 如果refiner_type为mid，则将JND矩阵初始化为eps，在扰动过程中不断更新JND矩阵
+        elif refiner_type == "mid":
+            print("refiner_type: mid")
+            JND = np.full(perturbed_data.shape, eps) # dynamic noise budget matrix
+        elif refiner_type == "post":
+            print("refiner_type: post")
+            JND = np.full(perturbed_data.shape, eps)
+        else:
+            raise ValueError('refiner_type choice must be one of pre, mid, and post')
     with torch.no_grad():
         if w == 0: # loss_type == 'x'
             tran_target = trans(target_data)
@@ -179,7 +200,7 @@ def pgd_attack_refiner(model,
             Loss_dict[k] = Loss.item()
         if k % 10 == 0:
             print("k:{} th, Loss:{}".format(k, Loss))
-            if noise_budget_refiner == 1:
+            if noise_budget_refiner == 1 and refiner_type == "mid": # 如果refiner的类型是mid，那么就根据扰动过程中的边缘区域更新JND
                 drop_value = math.floor((eps - min_eps) / (attack_num / update_interval - 2)) # 1 = (16 -8) / (100 / 10 - 2); 1 = (16 - 12) / (50 / 10 - 2); 2 = (16 - 8) / (50 / 10 -2)
                 if k != 0 and k % update_interval == 0:
                     for idx, adv_img in enumerate(perturbed_data):
@@ -195,13 +216,27 @@ def pgd_attack_refiner(model,
                         print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
         grad = torch.autograd.grad(Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
-        if noise_budget_refiner == 1:
+        # 只有"mid" or "pre"两种类型才会在扰动过程中使用JND矩阵
+        if noise_budget_refiner == 1 and (refiner_type == "mid" or refiner_type == "pre"):
             et = (adv_perturbed_data - original_data).clamp(-255, 255).to(torch.float32).cpu().detach().numpy()
             et = np.minimum(np.maximum(et, -JND), JND)
             et = torch.from_numpy(et).to(model.device).to(model.dtype)
         else:
             et = torch.clamp(adv_perturbed_data - original_data, min=-eps, max=+eps)
         perturbed_data = torch.clamp(original_data + et, min=torch.min(original_data), max=torch.max(original_data)).detach().clone()
+    # 如果refiner_type为post，那么，需要对扰动后的图像的进行边缘检测并抑制新出现的边缘区域
+    if noise_budget_refiner == 1 and refiner_type == "post":
+        for idx, adv_img in enumerate(perturbed_data):
+            adv_img = adv_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+            edges = cv2.Canny(adv_img, weak_edge, strong_edge) # edges in adversarial images
+            edges = edges - ori_edges_list[idx]
+            mean_filtered = cv2.blur(edges, (mean_filter_size, mean_filter_size))
+            non_zero_indices = np.nonzero(mean_filtered) # non-zero positions
+            rows, cols = non_zero_indices[0], non_zero_indices[1]
+            for i in range(len(rows)):
+                for j in range(0, 3):
+                    JND[idx][j][rows[i], cols[i]] = min_eps # 新增边缘区域抑制
+            print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
     return perturbed_data.cpu(), Loss_dict
 
 def load_data(data_dir, image_size=512, resample=2):
@@ -310,6 +345,8 @@ def main(args):
             targeted_image_folder = './target_images/colored_mist'
         elif args.target_type == 'gray':
             targeted_image_folder = './target_images/gray'
+        else:
+            raise ValueError("target_type out of range")
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
         
         original_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)
@@ -328,6 +365,7 @@ def main(args):
                             args.min_eps,
                             args.update_interval,
                             args.noise_budget_refiner,
+                            args.refiner_type,
                             args.loss_choice,
                             args.w,
                             args.weak_edge,
@@ -525,6 +563,13 @@ def parse_args(input_args=None):
         default=1,
         required=True,
         help = "with noise budget refiner"
+    )
+    parser.add_argument(
+        "--refiner_type",
+        type=str,
+        default="mid",
+        required=True,
+        help = "pre, mid, post"
     )
     if input_args is not None:
         args = parser.parse_args(input_args)

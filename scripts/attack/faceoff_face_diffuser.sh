@@ -14,13 +14,14 @@ export weak_edge=100 # 边缘检测器的弱边
 export mean_filter_size=3 # 均值滤波器的尺寸
 export update_interval=10 # 阈值更新间隔
 export noise_budget_refiner=1 # 是否使用refiner
+export refiner_type="mid2" # post, pre, or mid0, mid1
 export device="cuda:1"
 export loss_choice="mse" # mse or cosine
 echo $noise_budget_refiner
 if [ "$noise_budget_refiner" = "1" ]; then
-    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_${refiner_type}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
 else
-    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_${refiner_type}";
 fi
 echo $adversarial_folder_name
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
@@ -56,6 +57,7 @@ python ./attack/faceoff.py \
     --min_eps $min_eps \
     --update_interval $update_interval \
     --noise_budget_refiner $noise_budget_refiner \
+    --refiner_type $refiner_type \
     --mean_filter_size $mean_filter_size \
     --strong_edge $strong_edge \
     --weak_edge $weak_edge

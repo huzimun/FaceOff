@@ -62,7 +62,7 @@ def pgd_attack_refiner(model,
                     for j in range(0, 3):
                         JND[idx][j][rows[i], cols[i]] = eps
         # 如果refiner_type为mid，则将JND矩阵初始化为eps，在扰动过程中不断更新JND矩阵
-        elif refiner_type == "mid":
+        elif refiner_type == "mid0" or refiner_type == "mid1" or refiner_type == "mid2":
             print("refiner_type: mid")
             JND = np.full(perturbed_data.shape, eps) # dynamic noise budget matrix
         elif refiner_type == "post":
@@ -200,7 +200,22 @@ def pgd_attack_refiner(model,
             Loss_dict[k] = Loss.item()
         if k % 10 == 0:
             print("k:{} th, Loss:{}".format(k, Loss))
-            if noise_budget_refiner == 1 and refiner_type == "mid": # 如果refiner的类型是mid，那么就根据扰动过程中的边缘区域更新JND
+            # 如果refiner的类型是mid0，那么就根据扰动过程中的边缘区域更新JND，直接降低到min_eps
+            if noise_budget_refiner == 1 and (refiner_type == "mid0" or refiner_type == "mid2"):
+                if k != 0 and k % update_interval == 0:
+                    for idx, adv_img in enumerate(perturbed_data):
+                        adv_img = adv_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
+                        edges = cv2.Canny(adv_img, weak_edge, strong_edge) # edges in adversarial images
+                        edges = edges - ori_edges_list[idx]
+                        mean_filtered = cv2.blur(edges, (mean_filter_size, mean_filter_size))
+                        non_zero_indices = np.nonzero(mean_filtered) # non-zero positions
+                        rows, cols = non_zero_indices[0], non_zero_indices[1]
+                        for i in range(len(rows)):
+                            for j in range(0, 3):
+                                JND[idx][j][rows[i], cols[i]] = min_eps
+                        print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
+            # 如果refiner的类型是mid1，那么就根据扰动过程中的边缘区域更新JND，逐渐降低
+            elif noise_budget_refiner == 1 and refiner_type == "mid1": 
                 drop_value = math.floor((eps - min_eps) / (attack_num / update_interval - 2)) # 1 = (16 -8) / (100 / 10 - 2); 1 = (16 - 12) / (50 / 10 - 2); 2 = (16 - 8) / (50 / 10 -2)
                 if k != 0 and k % update_interval == 0:
                     for idx, adv_img in enumerate(perturbed_data):
@@ -217,7 +232,7 @@ def pgd_attack_refiner(model,
         grad = torch.autograd.grad(Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
         # 只有"mid" or "pre"两种类型才会在扰动过程中使用JND矩阵
-        if noise_budget_refiner == 1 and (refiner_type == "mid" or refiner_type == "pre"):
+        if noise_budget_refiner == 1 and refiner_type != "post":
             et = (adv_perturbed_data - original_data).clamp(-255, 255).to(torch.float32).cpu().detach().numpy()
             et = np.minimum(np.maximum(et, -JND), JND)
             et = torch.from_numpy(et).to(model.device).to(model.dtype)
@@ -225,7 +240,8 @@ def pgd_attack_refiner(model,
             et = torch.clamp(adv_perturbed_data - original_data, min=-eps, max=+eps)
         perturbed_data = torch.clamp(original_data + et, min=torch.min(original_data), max=torch.max(original_data)).detach().clone()
     # 如果refiner_type为post，那么，需要对扰动后的图像的进行边缘检测并抑制新出现的边缘区域
-    if noise_budget_refiner == 1 and refiner_type == "post":
+    if noise_budget_refiner == 1 and (refiner_type == "post" or refiner_type == "mid2"):
+        # 获取新增边缘的JND矩阵
         for idx, adv_img in enumerate(perturbed_data):
             adv_img = adv_img.clamp(0, 255).to(torch.uint8).permute(1, 2, 0).cpu().numpy()
             edges = cv2.Canny(adv_img, weak_edge, strong_edge) # edges in adversarial images
@@ -237,6 +253,13 @@ def pgd_attack_refiner(model,
                 for j in range(0, 3):
                     JND[idx][j][rows[i], cols[i]] = min_eps # 新增边缘区域抑制
             print("idx:{}, min JND:{}, mean JND:{}".format(idx, np.min(JND[idx]), np.mean(JND[idx])))
+        # 使用JND矩阵来更新et（第一行代码注释了因为最后一次循环已经获取了et）
+        # et = (adv_perturbed_data - original_data).clamp(-255, 255).to(torch.float32).cpu().detach().numpy()
+        et = et.clamp(-255, 255).to(torch.float32).cpu().detach().numpy()
+        et = np.minimum(np.maximum(et, -JND), JND)
+        et = torch.from_numpy(et).to(model.device).to(model.dtype)
+        # 使用et更新对抗样本
+        perturbed_data = torch.clamp(original_data + et, min=torch.min(original_data), max=torch.max(original_data)).detach().clone()
     return perturbed_data.cpu(), Loss_dict
 
 def load_data(data_dir, image_size=512, resample=2):
@@ -318,14 +341,14 @@ def main(args):
     if args.noise_budget_refiner == 1:
         adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_choice + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
-            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) \
+            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) + '_' + args.refiner_type \
             +  '_edge' + str(args.strong_edge) + '-' + str(args.weak_edge) + '_filter' + str(args.mean_filter_size) \
             + '_min-eps'+ str(args.min_eps) + '_interval' + str(args.update_interval)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     else:
         adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_choice + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
-            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
+            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) + '_' + args.refiner_type
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
     for person_id in sorted(os.listdir(args.data_dir)):
@@ -569,7 +592,7 @@ def parse_args(input_args=None):
         type=str,
         default="mid",
         required=True,
-        help = "pre, mid, post"
+        help = "pre, mid0, mid1, mid2, post"
     )
     if input_args is not None:
         args = parser.parse_args(input_args)

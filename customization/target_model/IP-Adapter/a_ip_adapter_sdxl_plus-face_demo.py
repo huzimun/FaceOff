@@ -159,6 +159,18 @@ def main(args):
         person_dir = os.path.join(args.input_dir, person_id + "/" + args.sub_name)
         print(person_dir)
         images = load_data(person_dir, args.resolution, 2)
+        # output_images0 = list()
+        # # import pdb; pdb.set_trace()
+        # for image in images:
+        #     output_images = ip_model.generate(pil_image=image, num_samples=4, num_inference_steps=30, seed=42, prompt="a magazine cover of a man")
+        #     output_images0 += output_images
+        # save_path = os.path.join(args.output_dir, person_id)
+        # os.makedirs(save_path, exist_ok=True)
+        # prompt_path = "a_magazine_cover_of_a_man"
+        # save_prompt_path = os.path.join(save_path, prompt_path)
+        # os.makedirs(save_prompt_path, exist_ok=True)
+        # for idx, image in enumerate(output_images0):
+        #     image.save(os.path.join(save_prompt_path, f"ipadapter_{idx:02d}.png"))
         output_images1 = list()
         output_images2 = list()
         for image in images:

@@ -348,7 +348,7 @@ def main(args):
     else:
         adv_image_dir_name = args.model_type + '_' + os.path.split(args.data_dir)[-1] + '_' + args.loss_choice + '_w' + str(args.w) + '_num' \
             + str(args.attack_num) + '_alpha' + str(args.alpha) + '_eps' + str(args.eps) + '_input' + str(args.input_size) \
-            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner) + '_' + args.refiner_type
+            + '_' + str(args.model_input_size) + '_' + args.target_type + '_refiner' + str(args.noise_budget_refiner)
         save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
     for person_id in sorted(os.listdir(args.data_dir)):

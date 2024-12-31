@@ -1,4 +1,4 @@
-export adversarial_folder_name="face_diffuser_VGGFace2_mse_w0.5_num50_alpha6_eps16_input512_224_max_refiner1_mid2_edge200-100_filter3_min-eps8_interval10"
+export adversarial_folder_name="face_diffuser_VGGFace2_mse_w0.5_num50_alpha6_eps16_input512_224_yingbu_refiner0"
 echo $adversarial_folder_name
 export device="cuda:0"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
@@ -70,7 +70,7 @@ python ./evaluations/pyiqa/iqa_metric.py \
     --scene2 "original_input" \
     --device $device
 
-export adversarial_folder_name="fastcomposer_VGGFace2_mse_w0.5_num50_alpha6_eps16_input512_224_max_refiner1_mid2_edge200-100_filter3_min-eps8_interval10"
+export adversarial_folder_name="fastcomposer_VGGFace2_mse_w0.5_num50_alpha6_eps16_input512_224_yingbu_refiner0"
 echo $adversarial_folder_name
 export device="cuda:0"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"

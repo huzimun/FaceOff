@@ -1,21 +1,21 @@
 export model_type="ipadapter" # 攻击的模型，photomaker_clip，vae，clip，ipadapter
 export pretrained_model_name_or_path="/data1/humw/Pretrains/IP-Adapter/models/image_encoder"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
 export data_dir_name="VGGFace2" # 输入数据集
-export w=0.5 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
+export w=0 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
 export attack_num=100 # 攻击轮次
 export alpha=6 # 步长
 export eps=16 # 最大噪声阈值
 export min_eps=8 # refiner的最小噪声阈值
 export input_size=512 # 输入图片的尺寸，对抗图片尺寸
 export model_input_size=224 # 模型输入图片尺寸
-export target_type="yingbu" # target图片的类型，max代表最大clip特征mse距离, yingbu代表target image为yingbu, mist代表mist图像
+export target_type="max" # target图片的类型，max代表最大clip特征mse距离, yingbu代表target image为yingbu, mist代表mist图像
 export strong_edge=200 # 边缘检测器的强边
 export weak_edge=100 # 边缘检测器的弱边
 export mean_filter_size=3 # 均值滤波器的尺寸
 export update_interval=10 # 阈值更新间隔
-export noise_budget_refiner=1 # 是否使用refiner
-export refiner_type="mid2" # post, pre, or mid0, mid1
-export device="cuda:3"
+export noise_budget_refiner=0 # 是否使用refiner
+export refiner_type="post" # post, pre, or mid0, mid1
+export device="cuda:2"
 export loss_choice="cosine" # mse or cosine
 echo $noise_budget_refiner
 if [ "$noise_budget_refiner" = "1" ]; then
@@ -27,10 +27,10 @@ echo $adversarial_folder_name
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
-export map_json_path="./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
-export prompts="a_photo_of_person;a_dslr_portrait_of_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
+export map_json_path="./max_clip_cosine_distance_map.json" # 不要用PhotoMaker目录下的"./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
+# export prompts="a_photo_of_person;a_dslr_portrait_of_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
-echo $prompts
+# echo $prompts
 
 export save_config_dir="./outputs/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir

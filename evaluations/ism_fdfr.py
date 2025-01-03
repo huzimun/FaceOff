@@ -104,7 +104,7 @@ def main():
     prompts = args.prompts.split(';')
     prompt_paths_list = []
     for i in range(0, len(prompts)):
-        prompt_paths_list.append(prompts[i].replace(' ', '_'))
+        prompt_paths_list.append(prompts[i].replace(' ', '_').replace('<', '').replace('>', ''))
     persons_list = os.listdir(args.data_dirs)
     if args.is_target == 1 and args.map_path != '':
         with open(args.map_path, "r", encoding="utf-8") as f:
@@ -112,6 +112,13 @@ def main():
     # 遍历对抗图片列表
     ism_list = [0.0 for _ in range(0, len(persons_list))]
     fdr_list = [0.0 for _ in range(0, len(persons_list))]
+    # 单独存放每个提示词的ISM和FDR
+    prompts_ism_list = []
+    for i in range(0, len(prompt_paths_list)):
+        prompts_ism_list.append([0.0 for _ in range(0, len(persons_list))])
+    prompts_fdr_list = []
+    for i in range(0, len(prompt_paths_list)):
+        prompts_fdr_list.append([0.0 for _ in range(0, len(persons_list))])
     for k, person_id in enumerate(persons_list):
         tmp_ism_list = list()
         tmp_fdr_list = list()
@@ -123,16 +130,19 @@ def main():
         elif args.is_target == 1 and args.target_path != '': # 特定target图片
             list_id_path = args.target_path
         # 遍历提示词列表
-        for prompt_name in prompt_paths_list:
+        for j, prompt_name in enumerate(prompt_paths_list):
             image_path = os.path.join(args.data_dirs, person_id, prompt_name)
             if args.out_out == 1:
                 list_id_path = os.path.join(args.emb_dirs, person_id, prompt_name)
             ism, fdr = matching_score_genimage_id(image_path, list_id_path, args.model_name)
             if ism == None:
                 tmp_ism_list.append(0)
+                prompts_ism_list[j][k] = 0
             else:
                 tmp_ism_list.append(ism.item())
+                prompts_ism_list[j][k] = ism.item()
             tmp_fdr_list.append(fdr)
+            prompts_fdr_list[j][k] = fdr
         print("tmp_ism_list:{}".format(str(tmp_ism_list)))
         print("tmp_fdr_list:{}".format(str(tmp_fdr_list)))
         ism_list[k] = sum(tmp_ism_list) * 1.0 / len(tmp_ism_list)
@@ -156,6 +166,18 @@ def main():
         f.write(str(sum(ism_list) * 1.0 / len(ism_list)) + '\n')
         f.write('ISM sample std\n')
         f.write(str(ism_sample_std) + '\n')
+        # 写入每个提示词的ISM和FDR
+        f.write('ISM and FDR for Each Prompt:\n')
+        for j, prompt_name in enumerate(prompt_paths_list):
+            f.write(prompt_name + '\n')
+            f.write("ISM list: " + str(prompts_ism_list[j]) + "\n")
+            f.write("ISM average value: " + str(sum(prompts_ism_list[j]) * 1.0 / len(prompts_ism_list[j])) + "\n")
+            prompt_ism_sample_std = np.std(prompts_ism_list[j], ddof=1)
+            f.write('prompt_ism_sample_std: ' + str(prompt_ism_sample_std) + '\n')
+            f.write('FDR list: ' + str(prompts_fdr_list[j]) + '\n')
+            f.write('FDR average value: ' + str(sum(prompts_fdr_list[j]) * 1.0 / len(prompts_fdr_list[j])) + '\n')
+            prompt_fdr_sample_std = np.std(prompts_fdr_list[j], ddof=1)
+            f.write('prompt_fdr_sample_std: ' + str(prompt_fdr_sample_std) + '\n')
     return
             
 if __name__ == '__main__':

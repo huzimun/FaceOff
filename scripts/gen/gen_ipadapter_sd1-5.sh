@@ -132,8 +132,8 @@
 #     --sub_name "" \
 #     --prior_generation_precision "fp16"
     
-export adversarial_folder_name="ipadapter_VGGFace2_cosine_w0.0_num100_alpha6_eps16_input512_224_max_refiner0"
-export experiment_name="ipadapter_VGGFace2_cosine_w0.0_num100_alpha6_eps16_input512_224_max_refiner0"
+export adversarial_folder_name="ipadapter_face_diffuser_VGGFace2_mse_w0_num200_alpha6_eps16_input512_224_yingbu"
+export experiment_name="ipadapter_face_diffuser_VGGFace2_mse_w0_num200_alpha6_eps16_input512_224_yingbu"
 export device="cuda:0"
 export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
 mkdir $save_config_dir

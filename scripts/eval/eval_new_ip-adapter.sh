@@ -1,4 +1,4 @@
-export adversarial_folder_name="ipadapter_VGGFace2_cosine_w0.0_num100_alpha6_eps16_input512_224_max_refiner0"
+export adversarial_folder_name="ipadapter_face_diffuser_VGGFace2_mse_w0_num200_alpha6_eps16_input512_224_yingbu"
 echo $adversarial_folder_name
 export device="cuda:0"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
@@ -43,21 +43,21 @@ python ./evaluations/ism_fdfr.py \
     --model_name "VGG-Face" \
     --input_name "set_B" \
     --out_out 0
-# CLIP
-python ./evaluations/my_clip/my_clip.py \
-    --prompts $prompts \
-    --data_dir $customization_output_dir \
-    --emb_dirs $VGGFace2 \
-    --save_dir $evaluation_output_dir \
-    --scene "protected_output" \
-    --scene2 "original_input" \
-    --is_target 0 \
-    --map_path "" \
-    --target_path "" \
-    --model_name_or_path $clip_model_name_or_path \
-    --device $device \
-    --input_name "" \
-    --out_out 0
+# # CLIP
+# python ./evaluations/my_clip/my_clip.py \
+#     --prompts $prompts \
+#     --data_dir $customization_output_dir \
+#     --emb_dirs $VGGFace2 \
+#     --save_dir $evaluation_output_dir \
+#     --scene "protected_output" \
+#     --scene2 "original_input" \
+#     --is_target 0 \
+#     --map_path "" \
+#     --target_path "" \
+#     --model_name_or_path $clip_model_name_or_path \
+#     --device $device \
+#     --input_name "" \
+#     --out_out 0
 
 # # protected_input and original_input: FID, LPIPS, SSIM, PSNR
 # # protected_input: LIQE, BRISQUE

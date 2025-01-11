@@ -84,7 +84,7 @@ def main():
                 prompts_liqe_list[j][k] = id_liqe_score
                 prompts_brisque_list[j][k] = id_brisque_score
                 
-                fid_score = fid_metric(image_path, list_id_path).item()
+                fid_score = fid_metric(prompt_img_path, list_id_path).item()
                 print("ave_fid_score:{}".format(fid_score))
                 tmp_fid_list.append(fid_score)
                 prompts_fid_list[j][k] = fid_score

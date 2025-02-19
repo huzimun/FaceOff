@@ -19,7 +19,7 @@ echo $adversarial_folder_name
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
-export map_json_path="./max_clip_cosine_distance_map.json" # 不要用PhotoMaker目录下的"./customization/target_model/PhotoMaker/VGGFace2_max_photomaker_clip_distance.json"
+export map_json_path="./max_clip_cosine_distance_map.json" 
 # export prompts="a_photo_of_person;a_dslr_portrait_of_person" # "a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export VGGFace2="./datasets/VGGFace2"
 # echo $prompts

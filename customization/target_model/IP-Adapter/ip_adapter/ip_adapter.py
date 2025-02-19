@@ -178,31 +178,31 @@ class IPAdapter:
             prompt = "best quality, high quality"
         if negative_prompt is None:
             negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
-
+        import pdb; pdb.set_trace()
         if not isinstance(prompt, List):
             prompt = [prompt] * num_prompts
         if not isinstance(negative_prompt, List):
             negative_prompt = [negative_prompt] * num_prompts
-
-        image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds(
+        
+        image_prompt_embeds, uncond_image_prompt_embeds = self.get_image_embeds( # torch.Size([1, 16, 768]), torch.Size([1, 16, 768])
             pil_image=pil_image, clip_image_embeds=clip_image_embeds
         )
         bs_embed, seq_len, _ = image_prompt_embeds.shape
         image_prompt_embeds = image_prompt_embeds.repeat(1, num_samples, 1)
-        image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
-        uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_samples, 1)
-        uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
+        image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1) # torch.Size([4, 16, 768])
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_samples, 1) # torch.Size([1, 64, 768])
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1) # torch.Size([4, 16, 768])
 
         with torch.inference_mode():
-            prompt_embeds_, negative_prompt_embeds_ = self.pipe.encode_prompt(
+            prompt_embeds_, negative_prompt_embeds_ = self.pipe.encode_prompt( # torch.Size([4, 77, 768]), torch.Size([4, 77, 768])
                 prompt,
                 device=self.device,
                 num_images_per_prompt=num_samples,
                 do_classifier_free_guidance=True,
                 negative_prompt=negative_prompt,
             )
-            prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
-            negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
+            prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1) # torch.Size([4, 93, 768]),16+77=93
+            negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1) # torch.Size([4, 93, 768])
 
         generator = get_generator(seed, self.device)
 

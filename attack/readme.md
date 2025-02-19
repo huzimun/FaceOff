@@ -1,0 +1,2 @@
+- ensemble_faceoff.py和ensemble_faceoff_mse_cos.py是IDProtector的实现，只攻击图像编码器。相较于IDProtector，我额外考虑了VAE。
+- ensemble_faceoff_mse_cos_unet.py是Anti-Refer的实现

@@ -1,7 +1,8 @@
-export model_type="vae,ipadapter" # 攻击的模型，photomaker_clip，vae，clip，ipadapter
-export pretrained_model_name_or_path="/data1/humw/Pretrains/stable-diffusion-v1-5,/data1/humw/Pretrains/IP-Adapter/models/image_encoder"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
+export model_type="ipadapter" # 攻击的模型，photomaker_clip，vae，clip，ipadapter
+export pretrained_model_name_or_path="/data1/humw/Pretrains/IP-Adapter/models/image_encoder"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
+export unet_path="/data1/humw/Pretrains/stable-diffusion-v1-5"
 export data_dir_name="test" # 输入数据集
-export w=0 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
+export w=1 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
 export attack_num=200 # 攻击轮次
 export alpha=6 # 步长
 export eps=16 # 最大噪声阈值
@@ -11,9 +12,7 @@ export device="cuda:0"
 export loss_choice="mse" # mse or cosine
 echo $noise_budget_refiner
 
-# export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}";
-
-export adversarial_folder_name="vae5_ipadapter_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${target_type}";
+export adversarial_folder_name="unet_ipadapter_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${target_type}";
 
 echo $adversarial_folder_name
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
@@ -26,9 +25,10 @@ export VGGFace2="./datasets/VGGFace2"
 
 export save_config_dir="./outputs/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
-cp "./scripts/attack/ensemble_faceoff.sh" $save_config_dir
+cp "./scripts/attack/ensemble_faceoff_unet.sh" $save_config_dir
 
-python ./attack/ensemble_faceoff.py \
+python ./attack/ensemble_faceoff_unet.py \
+    --unet_path $unet_path \
     --adversarial_folder_name $adversarial_folder_name \
     --device $device \
     --prior_generation_precision "bf16" \

@@ -110,6 +110,7 @@ def parse_args(input_args=None):
 
 def main(args):
     print(args)
+    # import pdb; pdb.set_trace()
     if args.prior_generation_precision == "fp32":
         torch_dtype = torch.float32
     elif args.prior_generation_precision == "fp16":

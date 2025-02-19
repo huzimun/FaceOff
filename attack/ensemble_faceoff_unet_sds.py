@@ -11,6 +11,7 @@ import argparse
 import json
 import pdb
 import cv2
+from diffusers import AutoencoderKL, DDPMScheduler, DiffusionPipeline, UNet2DConditionModel
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
 from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
@@ -18,6 +19,10 @@ import random
 import numpy as np
 import time
 import math
+from tqdm.auto import tqdm
+from transformers import AutoTokenizer, PretrainedConfig
+
+
 seed = 1
 random.seed(seed) # python的随机种子一样
 np.random.seed(seed) # numpy的随机种子一样
@@ -26,6 +31,11 @@ torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 # 多模型攻击，对多个图像编码器进行攻击
 def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
+                vae,
+                unet,
+                text_encoder,
+                tokenizer,
+                noise_scheduler,
                 perturbed_data,
                 original_data,
                 alpha,
@@ -36,6 +46,8 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 trans_vae,
                 loss_choice,
                 w):
+    # UNet不需要梯度
+    unet.requires_grad_(False)
     with torch.no_grad():
         tran_target_vae = trans_vae(target_data)
         tran_target_clip = trans_clip(target_data)
@@ -68,22 +80,58 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 raise ValueError('model type choice must be one of vae, clip, and photomaker')
             target_image_embeds_dict[k] = target_image_embeds
             origin_image_embeds_dict[k] = ori_embeds
+        instance_prompt = "a photo of person"
+        input_ids = tokenizer(
+            instance_prompt,
+            truncation=True,
+            padding="max_length",
+            max_length=tokenizer.model_max_length,
+            return_tensors="pt",
+        ).input_ids.repeat(len(perturbed_data), 1)
     Loss_dict = {}
     for epoch in range(0, attack_num):
         perturbed_data.requires_grad_()
         tran_perturbed_data_vae = trans_vae(perturbed_data)
         tran_perturbed_data_clip = trans_clip(perturbed_data)
-        Loss_x_ = []
-        Loss_d_ = []
+        
+        # 计算去噪损失
+        latents = vae.encode(tran_perturbed_data_vae).latent_dist.sample() * vae.config.scaling_factor
+        latents_no_grad = latents.detach().clone()
+        
+        with torch.no_grad():
+            noise = torch.randn_like(latents_no_grad)
+            bsz = latents_no_grad.shape[0]
+            timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents_no_grad.device)
+            timesteps = timesteps.long()
+            noisy_latents = noise_scheduler.add_noise(latents_no_grad, noise, timesteps)
+
+            # Get the text embedding for conditioning
+            encoder_hidden_states = text_encoder(input_ids.to(perturbed_data.device))[0]
+            
+            model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+            
+            if noise_scheduler.config.prediction_type == "epsilon":
+                target = noise
+            elif noise_scheduler.config.prediction_type == "v_prediction":
+                target = noise_scheduler.get_velocity(latents_no_grad, noise, timesteps)
+            else:
+                raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+            
+            # no prior preservation
+            unet.zero_grad()
+            text_encoder.zero_grad()
+            denoiser_Loss = -1 * F.mse_loss(model_pred.float(), target.float(), reduction="mean") # 取负，保证越小越好
+
+        # 计算条件损失
+        con_Loss_x_ = []
+        con_Loss_d_ = []
         for k in model_dict.keys():
             model_type = k
             model = model_dict[k]
             target_image_embeds = target_image_embeds_dict[k]
             ori_embeds = origin_image_embeds_dict[k]
-            wi = 1
             if model_type == 'vae':
-                wi = 5
-                adv_image_embeds = model.encode(tran_perturbed_data_vae).latent_dist.sample() * model.config.scaling_factor
+                adv_image_embeds = latents
             elif model_type == 'photomaker':
                 adv_image_embeds = model(tran_perturbed_data_clip)
             elif model_type == 'clip':
@@ -95,29 +143,84 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
             else:
                 raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker')
             if loss_choice == 'mse':
-                Loss_x = wi * F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
-                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
+                con_Loss_x = F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
+                con_Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean") # 取负，保证越小越好
             elif loss_choice == 'cosine':
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
+                con_Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean() # 取负，保证越小越好
+                con_Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             else:
                 raise ValueError('Loss choice must be one of mse or cosine')
-            Loss_x_.append(Loss_x)
-            Loss_d_.append(Loss_d)
+            con_Loss_x_.append(con_Loss_x)
+            con_Loss_d_.append(con_Loss_d)
         # pdb.set_trace()
-        Loss_x_ = torch.stack(Loss_x_).view(1, len(model_dict.keys()))
-        Loss_d_ = torch.stack(Loss_d_).view(1, len(model_dict.keys()))
-        Loss_ = (1 - w) * Loss_x_ + w * Loss_d_ # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
-        Loss_ = Loss_.mean()
+        con_Loss_x_ = torch.stack(con_Loss_x_).view(1, len(model_dict.keys()))
+        con_Loss_d_ = torch.stack(con_Loss_d_).view(1, len(model_dict.keys()))
+        con_Loss_ = (1 - w) * con_Loss_x_ + w * con_Loss_d_ # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
+        con_Loss_ = con_Loss_.mean()
+
+        total_Loss = con_Loss_ + denoiser_Loss
         # save loss
-        Loss_dict[epoch] = [Loss_.item(), Loss_x_.mean().item(), Loss_d_.mean().item()]
+        Loss_dict[epoch] = [total_Loss.item(), con_Loss_.mean().item(), denoiser_Loss.mean().item()]
         if epoch % 10 == 0:
-            print("epoch:{} th, Loss:{}".format(epoch, Loss_.item()))
-        grad = torch.autograd.grad(Loss_, perturbed_data)[0]
+            print("epoch:{} th, Loss:{}".format(epoch, total_Loss.item()))
+        grad = torch.autograd.grad(total_Loss, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
         et = torch.clamp(adv_perturbed_data - original_data, min=-eps, max=+eps)
         perturbed_data = torch.clamp(original_data + et, min=torch.min(original_data), max=torch.max(original_data)).detach().clone()
     return perturbed_data.cpu(), Loss_dict
+
+def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: str, revision: str):
+    text_encoder_config = PretrainedConfig.from_pretrained(
+        pretrained_model_name_or_path,
+        subfolder="text_encoder",
+        revision=revision,
+    )
+    model_class = text_encoder_config.architectures[0]
+
+    if model_class == "CLIPTextModel":
+        from transformers import CLIPTextModel
+
+        return CLIPTextModel
+    elif model_class == "RobertaSeriesModelWithTransformation":
+        from diffusers.pipelines.alt_diffusion.modeling_roberta_series import RobertaSeriesModelWithTransformation
+
+        return RobertaSeriesModelWithTransformation
+    else:
+        raise ValueError(f"{model_class} is not supported.")
+    
+def load_sd_model(args, model_path):
+    print(model_path)
+    # import correct text encoder class
+    text_encoder_cls = import_model_class_from_model_name_or_path(model_path, args.prior_generation_precision)
+
+    # Load scheduler and models
+    text_encoder = text_encoder_cls.from_pretrained(
+        model_path,
+        subfolder="text_encoder",
+        revision=args.prior_generation_precision,
+    )
+    unet = UNet2DConditionModel.from_pretrained(model_path, subfolder="unet", revision=args.prior_generation_precision)
+
+    # num_iters = 100
+    # num_train_steps = 20
+    # num_pgd_attack_steps = 20
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path,
+        subfolder="tokenizer",
+        revision=args.prior_generation_precision,
+        use_fast=False,
+    )
+
+    noise_scheduler = DDPMScheduler.from_pretrained(model_path, subfolder="scheduler")
+
+    vae = AutoencoderKL.from_pretrained(model_path, subfolder="vae", revision=args.prior_generation_precision)
+
+    vae.requires_grad_(False)
+
+    text_encoder.requires_grad_(False)
+
+    return text_encoder, unet, tokenizer, noise_scheduler, vae
 
 def load_data(data_dir, image_size=512, resample=2):
     import numpy as np
@@ -161,6 +264,12 @@ def main(args):
         torch_dtype = torch.bfloat16
     else:
         raise ValueError("prior_generation_precision must be one of [fp32, fp16, bf16]")
+    # 加载SD模型
+    text_encoder, unet, tokenizer, noise_scheduler, vae = load_sd_model(args, args.unet_path)
+    vae.to(args.device, dtype=torch_dtype)
+    text_encoder.to(args.device, dtype=torch_dtype)
+    unet.to(args.device, dtype=torch_dtype)
+    
     model_type_list = args.model_type.split(',')
     model_path_list = args.pretrained_model_name_or_path.split(',')
     model_dict = {} # key为模型类型，value为模型
@@ -185,6 +294,8 @@ def main(args):
         else:
             raise ValueError("model_type out of range")
         model_dict[model_type] = model
+    # if "vae" not in model_type_list: # 如果没有单独加载vae，就加载sd中的vae
+    #     model_dict["vae"] = vae
     if args.resample_interpolation == 'BILINEAR':
         resample_interpolation = transforms.InterpolationMode.BILINEAR
     else:
@@ -241,6 +352,11 @@ def main(args):
         target_data = target_data.to(args.device).requires_grad_(False)
         
         adv_data, Loss_dict = pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
+                vae,
+                unet,
+                text_encoder,
+                tokenizer,
+                noise_scheduler,
                 perturbed_data,
                 original_data,
                 args.alpha,
@@ -375,11 +491,18 @@ def parse_args(input_args=None):
         help = "save path"
     )
     parser.add_argument(
+        "--unet_path",
+        type=str,
+        default='/data1/humw/Pretrains/stable-diffusion-v1-5',
+        required=True,
+        help = "path to sd v1-5"
+    )
+    parser.add_argument(
         "--model_type",
         type=str,
-        default='vae,ipadapter,photomaker,face_diffuser',
+        default='ipadapter,face_diffuser',
         required=True,
-        help = "vae, clip, ipadapter, photomaker, face_diffuser"
+        help = "ipadapter,face_diffuser"
     )
     parser.add_argument(
         "--pretrained_model_name_or_path",

@@ -34,7 +34,6 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 target_data,
                 trans_clip,
                 trans_vae,
-                loss_choice,
                 w):
     with torch.no_grad():
         tran_target_vae = trans_vae(target_data)
@@ -80,28 +79,28 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
             model = model_dict[k]
             target_image_embeds = target_image_embeds_dict[k]
             ori_embeds = origin_image_embeds_dict[k]
-            wi = 1
             if model_type == 'vae':
-                wi = 5
                 adv_image_embeds = model.encode(tran_perturbed_data_vae).latent_dist.sample() * model.config.scaling_factor
+                Loss_x = F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
+                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
             elif model_type == 'photomaker':
                 adv_image_embeds = model(tran_perturbed_data_clip)
+                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'clip':
                 adv_image_embeds = model.encode_image(tran_perturbed_data_clip)
+                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'ipadapter':
                 adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).hidden_states[-2]
+                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'face_diffuser':
                 adv_image_embeds = model(tran_perturbed_data_clip.unsqueeze(0))
-            else:
-                raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker')
-            if loss_choice == 'mse':
-                Loss_x = wi * F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
-                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
-            elif loss_choice == 'cosine':
                 Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
                 Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             else:
-                raise ValueError('Loss choice must be one of mse or cosine')
+                raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker')
             Loss_x_.append(Loss_x)
             Loss_d_.append(Loss_d)
         # pdb.set_trace()
@@ -249,7 +248,6 @@ def main(args):
                 target_data,
                 all_trans_for_clip,
                 all_trans_for_vae,
-                args.loss_choice,
                 args.w)
         # save image
         savepath = os.path.join(save_folder, person_id)
@@ -296,13 +294,6 @@ def parse_args(input_args=None):
         default=200,
         required=True,
         help = "attack number"
-    )
-    parser.add_argument(
-        "--loss_choice",
-        type=str,
-        default="cosine",
-        required=True,
-        help = "cosine or mse"
     )
     parser.add_argument(
         "--w",

@@ -2,7 +2,8 @@
 
 This repository contains the official implementation of FaceOff, a novel defense mechanism against unauthorized text-to-image identity customization.
 
-**Note**: The supplementary experimental results on the scaling factor $\lambda$ is provided in Supplementary_experimental_results.md
+<span style="color: #8B0000; font-weight: bold;">Note: The ablation study on the scaling factor is provided in Supplementary_experimental_results.md</span>
+
 
 ## Software Dependencies
 We provide a conda environment file for easy setup. To create the environment, run:

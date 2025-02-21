@@ -168,6 +168,7 @@ datasets
 pretrains
 *.pt
 *.h5
+*.bin
 
 # customization models
 # customization

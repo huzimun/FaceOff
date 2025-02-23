@@ -1,7 +1,5 @@
-# Supplementary experimental results 
-
-## Ablation study on the scaling factor $\lambda$
-For the scaling factor $\lambda$, we conduct an ablation study on the performance of IP-Adapter, Fastcomposer and DreamBooth. To better compare with the individual target loss and deviation loss, we use a ratio $w$ to replace $\lambda$ in the FaceOff loss function:
+We conduct an ablation study on the the scaling factor $\lambda$ to analyze its impact on protection efficacy across four target models. 
+To better compare with the individual target loss and deviation loss, we use a ratio $w$ to replace $\lambda$ in the FaceOff loss function:
 - FaceOff loss function in our paper:
 
     $L_{FaceOff} = L_{target} + \lambda * L_{deviation}$
@@ -18,7 +16,7 @@ We can also observe that the IMS values of w= 0.25, 0.5, and 0.75 are always les
 | Method | $IMS_{ARC}$↓                      | $IMS_{VGG}$↓                      | $IMS_{ARC}$↓                        | $IMS_{VGG}$↓                        | $IMS_{ARC}$↓                        | $IMS_{VGG}$↓                        | $IMS_{ARC}$↓                        | $IMS_{VGG}$↓                        |
 | No Def.| 0.37±0.08                    | 0.76±0.07                    | 0.38±0.079                     | 0.77±0.07                      | 0.39±0.08                      | 0.77±0.07                      | 0.57±0.06                      | 0.82±0.06                      |
 | 0      | 0.05±0.06                    | 0.35±0.23                    | 0.18±0.09                      | 0.60±0.11                      | 0.18±0.08                      | 0.60±0.11                      | 0.16±0.10                      | 0.51±0.23                      |
-| 0.25   | 0.04±0.04                    | 0.32±0.22                    | 0.17±0.08                      | 0.58±0.12                      | 0.17±0.08                      | 0.59±0.12                      | **0.11±0.09**                      | **0.41±0.22**                      |
+| 0.25   | **0.04±0.04**                    | 0.32±0.22                    | 0.17±0.08                      | 0.58±0.12                      | 0.17±0.08                      | 0.59±0.12                      | **0.11±0.09**                      | **0.41±0.22**                      |
 | 0.5    | **0.04±0.06**                  | **0.28±0.24**                    | **0.15±0.08**                      | **0.56±0.13**                      | **0.15±0.08**                      | **0.57±0.13**                     | 0.25±0.10                      | 0.64±0.18                      |
-| 0.75 | 0.06±0.05                    | 0.43±0.13                    | 0.15±0.09                      | 0.59±0.12                      | 0.15±0.09                      | 0.60±0.13                      | 0.38±0.09                      | 0.75±0.10                      |
+| 0.75 | 0.06±0.05                    | 0.43±0.13                    | **0.15±0.09**                      | 0.59±0.12                      | **0.15±0.09**                      | 0.60±0.13                      | 0.38±0.09                      | 0.75±0.10                      |
 | 1      | 0.07±0.05           | 0.43±0.10           | 0.17±0.10             | 0.61±0.13             | 0.18±0.10              | 0.61±0.13              | 0.38±0.09            | 0.75±0.08            |

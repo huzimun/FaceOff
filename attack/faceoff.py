@@ -13,7 +13,7 @@ import pdb
 import cv2
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
-from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
+# from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
 import random
 import numpy as np
 import time

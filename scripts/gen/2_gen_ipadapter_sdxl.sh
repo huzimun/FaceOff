@@ -4,7 +4,7 @@ export device="cuda:2"
 export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
 mkdir $save_config_dir
 cp "./scripts/gen/2_gen_ipadapter_sdxl.sh" $save_config_dir
-python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
+python3 ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
     --model_type "sdxl" \
     --base_model_path "/data1/humw/Pretrains/stable-diffusion-xl-base-1.0" \
     --image_encoder_path "/data1/humw/Pretrains/IP-Adapter/models/image_encoder" \

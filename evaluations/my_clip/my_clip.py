@@ -42,6 +42,9 @@ def main():
             max_dist_dict = json.load(f)
     # 遍历对抗图片列表
     clip_list = [0.0 for _ in range(0, len(persons_list))]
+    prompts_ism_list = []
+    for i in range(0, len(prompt_paths_list)):
+        prompts_ism_list.append([0.0 for _ in range(0, len(persons_list))])
     with torch.no_grad():
         for k, person_id in enumerate(persons_list):
             tmp_clip_list = list()
@@ -54,7 +57,7 @@ def main():
                 list_id_path = args.target_path
             # 遍历提示词列表
             # pdb.set_trace()
-            for prompt_name in prompt_paths_list:
+            for j, prompt_name in enumerate(prompt_paths_list):
                 image_path = os.path.join(args.data_dirs, person_id, prompt_name)
                 if args.out_out == 1:
                     list_id_path = os.path.join(args.emb_dirs, person_id, prompt_name)
@@ -77,8 +80,10 @@ def main():
                 ism = F.cosine_similarity(ave_embedding, ave_id_embedding, dim=-1).mean()
                 if ism == None:
                     tmp_clip_list.append(0)
+                    prompts_ism_list[j][k] = 0
                 else:
                     tmp_clip_list.append(ism.item())
+                    prompts_ism_list[j][k] = ism.item()
             print("tmp_clip_list:{}".format(str(tmp_clip_list)))
             clip_list[k] = sum(tmp_clip_list) * 1.0 / len(tmp_clip_list)
     print("clip_list:{}".format(clip_list))
@@ -92,6 +97,14 @@ def main():
         f.write(str(sum(clip_list) * 1.0 / len(clip_list)) + '\n')
         f.write('CLIP IMS STD\n')
         f.write(str(clip_sample_std) + '\n')
+        # 写入每个提示词的ISM和FDR
+        f.write('CLIP ISM for Each Prompt:\n')
+        for j, prompt_name in enumerate(prompt_paths_list):
+            f.write(prompt_name + '\n')
+            f.write("ISM list: " + str(prompts_ism_list[j]) + "\n")
+            f.write("ISM average value: " + str(sum(prompts_ism_list[j]) * 1.0 / len(prompts_ism_list[j])) + "\n")
+            prompt_ism_sample_std = np.std(prompts_ism_list[j], ddof=1)
+            f.write('prompt_ism_sample_std: ' + str(prompt_ism_sample_std) + '\n')
     return
             
 if __name__ == '__main__':

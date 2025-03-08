@@ -115,6 +115,7 @@ class IPAdapter:
                 ).to(self.device, dtype=torch.float16)
         unet.set_attn_processor(attn_procs)
         if hasattr(self.pipe, "controlnet"):
+            import pdb; pdb.set_trace()
             if isinstance(self.pipe.controlnet, MultiControlNetModel):
                 for controlnet in self.pipe.controlnet.nets:
                     controlnet.set_attn_processor(CNAttnProcessor(num_tokens=self.num_tokens))
@@ -178,7 +179,7 @@ class IPAdapter:
             prompt = "best quality, high quality"
         if negative_prompt is None:
             negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         if not isinstance(prompt, List):
             prompt = [prompt] * num_prompts
         if not isinstance(negative_prompt, List):

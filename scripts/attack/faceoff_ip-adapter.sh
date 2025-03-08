@@ -1,27 +1,27 @@
 export model_type="ipadapter" # target models: photomaker_clip，vae，clip，ipadapter
 export pretrained_model_name_or_path="/data1/humw/Pretrains/IP-Adapter/models/image_encoder"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
-export data_dir_name="VGGFace2" # validation dataset
-export w=0 # w=0.0, x; w=1.0, d; (1-w) * L_{target} + w * L_{deviation}
+export data_dir_name="test-conda-antidreambooth" # validation dataset
+export w=1.0 # w=0.0, x; w=1.0, d; (1-w) * L_{target} + w * L_{deviation}
 export attack_num=100 # attack iterations
 export alpha=6 # step size
 export eps=16 # max noise budget
 export min_eps=8 # min budget for refiner
 export input_size=512 # original image size, protected image size
 export model_input_size=224 # input image size for target model
-export target_type="max" # type of target image: max is max clip embedding mse distance, yingbu is beijing opera mask, mist is mist image, gray is gray image
+export target_type="mist" # type of target image: max is max clip embedding mse distance, yingbu is beijing opera mask, mist is mist image, gray is gray image
 export strong_edge=200 # strong edge threshold for edge detection
 export weak_edge=100 # weak edge threshold for edge detection
 export mean_filter_size=3 # mean filter kernel size
 export update_interval=10 # noise budget update interval
 export noise_budget_refiner=0 # use refiner or not: 1 or 0 (defualt is 0)
 export refiner_type="post" # post, pre, or mid0, mid1
-export device="cuda:2"
+export device="cuda:0"
 export loss_choice="cosine" # mse or cosine
 echo $noise_budget_refiner
 if [ "$noise_budget_refiner" = "1" ]; then
     export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_${refiner_type}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
 else
-    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_${refiner_type}";
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
 fi
 echo $adversarial_folder_name
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"

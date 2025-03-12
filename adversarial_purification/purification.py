@@ -9,6 +9,19 @@ from pathlib import Path
 import argparse
 import mosek
 import time
+import os
+from tqdm import tqdm
+import pdb
+from skimage.io import imread, imsave
+from skimage.util import random_noise
+from skimage import img_as_ubyte, img_as_float32
+import argparse
+
+
+def gaussian_noise(img, stddev):
+    var = stddev * stddev
+    noisy_img = random_noise(img, mode="gaussian", var=var, clip=True)
+    return noisy_img
 
 def jpeg_compress_image(image: Image.Image, quality: int = 75) -> Image.Image:
     """
@@ -34,14 +47,14 @@ def parse_args(input_args=None):
         help="cuda or cpu",
     )
     parser.add_argument(
-        "--data_dir",
+        "--experiment_name",
         type=str,
         default='',
         required=True,
-        help="Path to input folders",
+        help="experiment_name",
     )
     parser.add_argument(
-        "--save_dir",
+        "--dataset_dir",
         type=str,
         default='',
         required=True,
@@ -91,13 +104,14 @@ def parse_args(input_args=None):
 
 def main(args):
     print(args)
+    
     if args.transform_sr or args.transform_tvm:
         # load model and scheduler
         sr_pipeline = StableDiffusionUpscalePipeline.from_pretrained(
             args.sr_model_path, revision="fp16",torch_dtype=torch.float16) 
 
         sr_pipeline = sr_pipeline.to(args.device)
-
+    # import pdb; pdb.set_trace()
     if args.transform_tvm:
         import cvxpy as cp
         def get_tvm_image(img, TVM_WEIGHT=0.01, PIXEL_DROP_RATE=0.02):
@@ -150,20 +164,29 @@ def main(args):
             # reshape back to 64*64
             Z_optimal = np.reshape(Z_optimal, img_array.shape)
 
-
             # If needed, convert the result back to a PIL Imagepip install mosek
             img_result = Image.fromarray(np.uint8(Z_optimal*255))
             img_result
             return img_result
-    os.makedirs(args.save_dir, exist_ok=True) 
-    for person_id in os.listdir(args.data_dir):
-        instance_images_path = os.path.join(args.data_dir, person_id)
+    input_dir = os.path.join(args.dataset_dir, args.experiment_name)
+    output_dir = os.path.join(args.dataset_dir, args.experiment_name)
+    if args.jpeg_transform:
+        output_dir = output_dir + "_jpeg" + str(args.jpeg_quality)
+    if args.transform_sr:
+        output_dir = output_dir + "_sr"
+    if args.transform_tvm:
+        output_dir = output_dir + "_tvm"
+    os.makedirs(output_dir, exist_ok=True)
+    # import pdb; pdb.set_trace()
+    for person_id in os.listdir(input_dir):
+        instance_images_path = os.path.join(input_dir, person_id)
         # instance_image = Image.open(self.instance_images_path[index % self.num_instance_images])
         instance_image_list = []
         for img_i_dir in os.listdir(instance_images_path):
             prompt="A photo of a person"
             img_path = os.path.join(instance_images_path, img_i_dir)
-            instance_image = Image.open(img_path)
+            instance_image = Image.open(img_path) # <PIL.PngImagePlugin.PngImageFile image mode=RGB size=512x512 at 0x7E45A5F007F0>
+            # import pdb; pdb.set_trace()
             if not instance_image.mode == "RGB":
                 instance_image = instance_image.convert("RGB")
             # consider some defenses like jpeg compression
@@ -180,10 +203,10 @@ def main(args):
                 instance_image = instance_image.resize((128, 128))
                 # another sr to [512, 512]
                 instance_image = sr_pipeline(image=instance_image,prompt=prompt, ).images[0]
-                
+
             instance_image_list.append(instance_image)
-            
-        save_path = os.path.join(args.save_dir, person_id)
+        # import pdb; pdb.set_trace()
+        save_path = os.path.join(output_dir, person_id)
         os.makedirs(save_path, exist_ok=True)
         img_names = [
             str(instance_path).split("/")[-1]
@@ -199,12 +222,12 @@ def main(args):
             torch.cuda.empty_cache()
             
 if __name__ == "__main__":
-    # args = parse_args()
-    # main(args)
     args = parse_args()
-    t1 = time.time()
     main(args)
-    t2 = time.time()
-    print('TIME COST: %.6f'%(t2-t1))
-    with open(file="time_costs.txt", mode='a') as f:
-        f.write(str(t2-t1) + '\n')
+    # args = parse_args()
+    # t1 = time.time()
+    # main(args)
+    # t2 = time.time()
+    # print('TIME COST: %.6f'%(t2-t1))
+    # with open(file="time_costs.txt", mode='a') as f:
+    #     f.write(str(t2-t1) + '\n')

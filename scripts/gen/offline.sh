@@ -1,19 +1,171 @@
-export adversarial_folder_name="PAP_SD15_VGGFace2"
-export experiment_name="PAP_SD15_VGGFace2"
+export adversarial_folder_name="SimAC_SD15_VGGFace2"
 export device="cuda:0"
-export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
-mkdir $save_config_dir
-cp "./scripts/gen/gen_ipadapter_sd1-5.sh" $save_config_dir
-python3 ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
-    --model_type "sd15" \
-    --base_model_path "/data1/humw/Pretrains/stable-diffusion-v1-5" \
-    --image_encoder_path "/data1/humw/Pretrains/IP-Adapter/models/image_encoder" \
-    --ip_ckpt "/data1/humw/Pretrains/IP-Adapter/models/ip-adapter-plus_sd15.bin" \
-    --vae_model_path "/data1/humw/Pretrains/sd-vae-ft-mse" \
-    --device $device \
-    --input_dir "./outputs/adversarial_images/${adversarial_folder_name}" \
-    --output_dir "./outputs/customization_outputs/${experiment_name}" \
-    --resolution 224 \
-    --sub_name "" \
-    --prior_generation_precision "fp16"
 
+export BASE_MODEL="SDXL-BASE-1"  # "SDXL-BASE-1" RealVisXL_V3 RealVisXL_V4
+if [ "$BASE_MODEL" = "SDXL-BASE-1" ]; then
+    export base_model_path="/data1/humw/Pretrains/stable-diffusion-xl-base-1.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V3" ]; then
+    export base_model_path="/data1/humw/Pretrains/RealVisXL-V3.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V4" ]; then
+    export base_model_path="/data1/humw/Pretrains/SG161222/RealVisXL_V4.0"
+else
+    echo "Invalid BASE_MODEL"
+    exit 1
+fi
+
+export lora=0
+
+export outputs_folder_name="photomaker_${BASE_MODEL}_${adversarial_folder_name}_lora-${lora}"
+
+export save_config_dir="./outputs/config_scripts_logs/${outputs_folder_name}"
+mkdir $save_config_dir
+cp "./scripts/gen/gen_photomaker.sh" $save_config_dir
+
+python3 ./customization/target_model/PhotoMaker/inference.py \
+    --input_folders "./outputs/adversarial_images/${adversarial_folder_name}" \
+    --save_dir "./outputs/customization_outputs/${outputs_folder_name}" \
+    --prompts "a photo of sks person;a dslr portrait of sks person" \
+    --photomaker_ckpt "/data1/humw/Pretrains/photomaker-v1.bin" \
+    --base_model_path ${base_model_path} \
+    --device $device \
+    --seed 42 \
+    --num_steps 50 \
+    --style_strength_ratio 20 \
+    --num_images_per_prompt 16 \
+    --pre_test 0 \
+    --height 1024 \
+    --width 1024 \
+    --lora $lora \
+    --input_name "" \
+    --trigger_word "sks" \
+    --gaussian_filter 0 \
+    --hflip 0
+
+export adversarial_folder_name="sds_eps16_steps100_gmode+"
+export device="cuda:0"
+
+export BASE_MODEL="SDXL-BASE-1"  # "SDXL-BASE-1" RealVisXL_V3 RealVisXL_V4
+if [ "$BASE_MODEL" = "SDXL-BASE-1" ]; then
+    export base_model_path="/data1/humw/Pretrains/stable-diffusion-xl-base-1.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V3" ]; then
+    export base_model_path="/data1/humw/Pretrains/RealVisXL-V3.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V4" ]; then
+    export base_model_path="/data1/humw/Pretrains/SG161222/RealVisXL_V4.0"
+else
+    echo "Invalid BASE_MODEL"
+    exit 1
+fi
+
+export lora=0
+
+export outputs_folder_name="photomaker_${BASE_MODEL}_${adversarial_folder_name}_lora-${lora}"
+
+export save_config_dir="./outputs/config_scripts_logs/${outputs_folder_name}"
+mkdir $save_config_dir
+cp "./scripts/gen/gen_photomaker.sh" $save_config_dir
+
+python3 ./customization/target_model/PhotoMaker/inference.py \
+    --input_folders "./outputs/adversarial_images/${adversarial_folder_name}" \
+    --save_dir "./outputs/customization_outputs/${outputs_folder_name}" \
+    --prompts "a photo of sks person;a dslr portrait of sks person" \
+    --photomaker_ckpt "/data1/humw/Pretrains/photomaker-v1.bin" \
+    --base_model_path ${base_model_path} \
+    --device $device \
+    --seed 42 \
+    --num_steps 50 \
+    --style_strength_ratio 20 \
+    --num_images_per_prompt 16 \
+    --pre_test 0 \
+    --height 1024 \
+    --width 1024 \
+    --lora $lora \
+    --input_name "" \
+    --trigger_word "sks" \
+    --gaussian_filter 0 \
+    --hflip 0
+
+export adversarial_folder_name="MetaCloak_SD15"
+export device="cuda:0"
+
+export BASE_MODEL="SDXL-BASE-1"  # "SDXL-BASE-1" RealVisXL_V3 RealVisXL_V4
+if [ "$BASE_MODEL" = "SDXL-BASE-1" ]; then
+    export base_model_path="/data1/humw/Pretrains/stable-diffusion-xl-base-1.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V3" ]; then
+    export base_model_path="/data1/humw/Pretrains/RealVisXL-V3.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V4" ]; then
+    export base_model_path="/data1/humw/Pretrains/SG161222/RealVisXL_V4.0"
+else
+    echo "Invalid BASE_MODEL"
+    exit 1
+fi
+
+export lora=0
+
+export outputs_folder_name="photomaker_${BASE_MODEL}_${adversarial_folder_name}_lora-${lora}"
+
+export save_config_dir="./outputs/config_scripts_logs/${outputs_folder_name}"
+mkdir $save_config_dir
+cp "./scripts/gen/gen_photomaker.sh" $save_config_dir
+
+python3 ./customization/target_model/PhotoMaker/inference.py \
+    --input_folders "./outputs/adversarial_images/${adversarial_folder_name}" \
+    --save_dir "./outputs/customization_outputs/${outputs_folder_name}" \
+    --prompts "a photo of sks person;a dslr portrait of sks person" \
+    --photomaker_ckpt "/data1/humw/Pretrains/photomaker-v1.bin" \
+    --base_model_path ${base_model_path} \
+    --device $device \
+    --seed 42 \
+    --num_steps 50 \
+    --style_strength_ratio 20 \
+    --num_images_per_prompt 16 \
+    --pre_test 0 \
+    --height 1024 \
+    --width 1024 \
+    --lora $lora \
+    --input_name "" \
+    --trigger_word "sks" \
+    --gaussian_filter 0 \
+    --hflip 0
+
+export adversarial_folder_name="CAAT_SD15"
+export device="cuda:0"
+
+export BASE_MODEL="SDXL-BASE-1"  # "SDXL-BASE-1" RealVisXL_V3 RealVisXL_V4
+if [ "$BASE_MODEL" = "SDXL-BASE-1" ]; then
+    export base_model_path="/data1/humw/Pretrains/stable-diffusion-xl-base-1.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V3" ]; then
+    export base_model_path="/data1/humw/Pretrains/RealVisXL-V3.0"
+elif [ "$BASE_MODEL" = "RealVisXL_V4" ]; then
+    export base_model_path="/data1/humw/Pretrains/SG161222/RealVisXL_V4.0"
+else
+    echo "Invalid BASE_MODEL"
+    exit 1
+fi
+
+export lora=0
+
+export outputs_folder_name="photomaker_${BASE_MODEL}_${adversarial_folder_name}_lora-${lora}"
+
+export save_config_dir="./outputs/config_scripts_logs/${outputs_folder_name}"
+mkdir $save_config_dir
+cp "./scripts/gen/gen_photomaker.sh" $save_config_dir
+
+python3 ./customization/target_model/PhotoMaker/inference.py \
+    --input_folders "./outputs/adversarial_images/${adversarial_folder_name}" \
+    --save_dir "./outputs/customization_outputs/${outputs_folder_name}" \
+    --prompts "a photo of sks person;a dslr portrait of sks person" \
+    --photomaker_ckpt "/data1/humw/Pretrains/photomaker-v1.bin" \
+    --base_model_path ${base_model_path} \
+    --device $device \
+    --seed 42 \
+    --num_steps 50 \
+    --style_strength_ratio 20 \
+    --num_images_per_prompt 16 \
+    --pre_test 0 \
+    --height 1024 \
+    --width 1024 \
+    --lora $lora \
+    --input_name "" \
+    --trigger_word "sks" \
+    --gaussian_filter 0 \
+    --hflip 0

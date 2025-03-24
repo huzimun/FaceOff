@@ -1,10 +1,10 @@
-export adversarial_folder_name="sdxl-IDProtector_conda-photomaker_VGGFace2_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0"
+export adversarial_folder_name="photomaker_SDXL-BASE-1_IDProtector_conda-photomaker_VGGFace2_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0_lora-0"
 echo $adversarial_folder_name
-export device="cuda:0"
+export device="cuda:1"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
-export prompts="a_photo_of_person;a_dslr_portrait_of_person"
+export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export Dataset="/data1/humw/Datasets/VGGFace2"
 export clip_model_name_or_path="/data1/humw/Pretrains/ViT-B-32.pt"
 echo $prompts
@@ -57,7 +57,7 @@ python3 ./evaluations/ism_fdfr.py \
 #     --target_path "" \
 #     --model_name_or_path $clip_model_name_or_path \
 #     --device $device \
-#     --input_name "" \
+#     --input_name "set_B" \
 #     --out_out 0
 
 # # IQA: protected output and original input
@@ -83,13 +83,13 @@ python3 ./evaluations/ism_fdfr.py \
 #     --device $device
 
 
-export adversarial_folder_name="sdxl-IDProtector_conda-photomaker_CelebA-HQ_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0"
+export adversarial_folder_name="photomaker_SDXL-BASE-1_IDProtector_conda-photomaker_CelebA-HQ_ipadapter-photomaker_cosine_eot-0_non-target_agm-0_norm-0_lora-0"
 echo $adversarial_folder_name
-export device="cuda:0"
+export device="cuda:1"
 export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
-export prompts="a_photo_of_person;a_dslr_portrait_of_person"
+export prompts="a_photo_of_sks_person;a_dslr_portrait_of_sks_person"
 export Dataset="/data1/humw/Datasets/CelebA-HQ"
 export clip_model_name_or_path="/data1/humw/Pretrains/ViT-B-32.pt"
 echo $prompts
@@ -142,7 +142,7 @@ python3 ./evaluations/ism_fdfr.py \
 #     --target_path "" \
 #     --model_name_or_path $clip_model_name_or_path \
 #     --device $device \
-#     --input_name "" \
+#     --input_name "set_B" \
 #     --out_out 0
 
 # # IQA: protected output and original input
@@ -166,4 +166,3 @@ python3 ./evaluations/ism_fdfr.py \
 #     --scene "protected_input" \
 #     --scene2 "original_input" \
 #     --device $device
-

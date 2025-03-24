@@ -1,5 +1,5 @@
-export adversarial_folder_name="Encoder_attack_conda-photomaker_VGGFace2_photomaker_cosine_eot-0_yingbu_agm-0_norm-0"
-export device="cuda:0"
+export adversarial_folder_name="CelebA-HQ"
+export device="cuda:3"
 
 export BASE_MODEL="SDXL-BASE-1"  # "SDXL-BASE-1" RealVisXL_V3 RealVisXL_V4
 if [ "$BASE_MODEL" = "SDXL-BASE-1" ]; then
@@ -36,7 +36,7 @@ python3 ./customization/target_model/PhotoMaker/inference.py \
   --height 1024 \
   --width 1024 \
   --lora $lora \
-  --input_name "" \
+  --input_name "set_B" \
   --trigger_word "sks" \
   --gaussian_filter 0 \
   --hflip 0

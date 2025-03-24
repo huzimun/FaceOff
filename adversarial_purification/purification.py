@@ -224,10 +224,3 @@ def main(args):
 if __name__ == "__main__":
     args = parse_args()
     main(args)
-    # args = parse_args()
-    # t1 = time.time()
-    # main(args)
-    # t2 = time.time()
-    # print('TIME COST: %.6f'%(t2-t1))
-    # with open(file="time_costs.txt", mode='a') as f:
-    #     f.write(str(t2-t1) + '\n')

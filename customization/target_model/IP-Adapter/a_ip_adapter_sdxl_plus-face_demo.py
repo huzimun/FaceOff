@@ -127,6 +127,7 @@ def main(args):
             torch_dtype=torch_dtype,
             add_watermarker=False,
         )
+        # import pdb; pdb.set_trace()
         # load ip-adapter
         ip_model = IPAdapterPlusXL(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
     elif args.model_type == 'sd15':

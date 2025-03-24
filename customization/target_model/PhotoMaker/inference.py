@@ -225,22 +225,29 @@ def main(args):
                 person_id_name = image_path_list[0].split('/')[-3]
             else:
                 person_id_name = image_path_list[0].split('/')[-2]
+            generated_ids = [] # 如果生成终端，通过设置generated_ids来控制跳过已生成的id
+            # generated_ids = ['n000061', 'n000058', 'n000057', 'n000068', 'n000076', 'n000080', 'n000063', 'n000050']
+            if person_id_name in generated_ids:
+                continue
             print("person_id_name:{}".format(person_id_name))
             print("prompt:{}".format(prompt))
-            negative_prompt = ""
-            images = pipe(
-                prompt=prompt,
-                input_id_images=input_id_images,
-                negative_prompt=negative_prompt,
-                num_images_per_prompt=args.num_images_per_prompt,
-                num_inference_steps=num_steps,
-                start_merge_step=start_merge_step,
-                generator=generator,
-                height=args.height,
-                width=args.width,
-                gaussian_filter=args.gaussian_filter,
-                hflip=args.hflip
-            ).images
+            negative_prompt = "(asymmetry, worst quality, low quality, illustration, 3d, 2d, painting, cartoons, sketch), open mouth"
+            images = []
+            for img_idx in range(args.num_images_per_prompt):
+                image = pipe(
+                    prompt=prompt,
+                    input_id_images=input_id_images,
+                    negative_prompt=negative_prompt,
+                    num_images_per_prompt=1, # 为减少显存开销，每次生成一张图像
+                    num_inference_steps=num_steps,
+                    start_merge_step=start_merge_step,
+                    generator=generator,
+                    height=args.height,
+                    width=args.width,
+                    gaussian_filter=args.gaussian_filter,
+                    hflip=args.hflip
+                ).images[0]
+                images.append(image)
             # save images
             prompt_name = prompt.replace(' ', '_')
             save_folder = os.path.join(args.save_dir, person_id_name, prompt_name)

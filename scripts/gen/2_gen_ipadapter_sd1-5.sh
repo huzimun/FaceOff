@@ -1,5 +1,5 @@
-export adversarial_folder_name="ASPL_ace-plus-ipadapter_VGGFace2_SD15_vae-ipadapter_yingbu_agm_mse_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0_bsr"
-export experiment_name="ASPL_ace-plus-ipadapter_VGGFace2_SD15_vae-ipadapter_yingbu_agm_mse_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0_bsr"
+export adversarial_folder_name="test"
+export experiment_name="test"
 export device="cuda:0"
 export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
 mkdir $save_config_dir
@@ -17,8 +17,9 @@ python3 ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo
     --sub_name "" \
     --prior_generation_precision "fp16"
 
-export adversarial_folder_name="ASPL_ace-plus-ipadapter_VGGFace2_SD15_vae-ipadapter_yingbu_agm_mse_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0_gau-7"
-export experiment_name="ASPL_ace-plus-ipadapter_VGGFace2_SD15_vae-ipadapter_yingbu_agm_mse_eot-1_sds-0_unT-unet-0_fix-unet-0_fix-noise-0_gau-7"
+
+export adversarial_folder_name="protected_test"
+export experiment_name="protected_test"
 export device="cuda:0"
 export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
 mkdir $save_config_dir

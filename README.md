@@ -33,6 +33,10 @@ We provide a conda environment file for easy setup. To create the environment, r
 ```
 conda env create -f environment.yaml
 ```
+
+- faceoff_v2
+    - 123
+
 ## Datasets and Pretrains
 - Datasets: 
     - VGGFace2: we use the preprocessed dataset from [Anti-DreamBooth](https://github.com/VinAIResearch/Anti-DreamBooth)

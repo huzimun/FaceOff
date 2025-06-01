@@ -1,80 +1,58 @@
-export EXPERIMENT_NAME="TED"
-export device="cuda:0"
-
-export DATASET="VGGFace2"
-if [ "$DATASET" = "VGGFace2" ]; then
-    export DATASET_DIR="/data1/xxxx/Datasets/VGGFace2"
-    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${DATASET}
+export model_type="face_diffuser" # target models: photomaker_clip，vae，clip，ipadapter, face_diffuser
+export pretrained_model_name_or_path="/data1/humw/Pretrains/clip-vit-large-patch14"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
+export data_dir_name="test" #validation dataset
+export w=0.5 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
+export attack_num=50 # attack iterations
+export alpha=6 # step size
+export eps=16 # max noise budget
+export min_eps=8 # min budget for refiner
+export input_size=512 # original image size, protected image size
+export model_input_size=224 # input image size for target model
+export target_type="max" # type of target image: max is max clip embedding mse distance, yingbu is beijing opera mask, mist is mist image, gray is gray image
+export device="cuda:2"
+export loss_choice="mse" # mse or cosine
+echo $noise_budget_refiner
+if [ "$noise_budget_refiner" = "1" ]; then
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}_${refiner_type}_edge${strong_edge}-${weak_edge}_filter${mean_filter_size}_min-eps${min_eps}_interval${update_interval}";
 else
-    echo "Invalid DATASET"
-    exit 1
+    export adversarial_folder_name="${model_type}_${data_dir_name}_${loss_choice}_w${w}_num${attack_num}_alpha${alpha}_eps${eps}_input${input_size}_${model_input_size}_${target_type}_refiner${noise_budget_refiner}";
 fi
+echo $adversarial_folder_name
+export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_name}"
+export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
+export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
+export map_json_path="/data1/humw/Codes/FaceOff/max_clip_cosine_distance_map.json"
+export VGGFace2="./datasets/VGGFace2"
 
-export model_types="vae15-ipadapter-photomaker"
-EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${model_types}
-
-# distance choice for adv attack loss
-export distance_choice="mix" # mse or cosine, mix use mse for vae, and cosine for ipadapter and photomaker
-if [ "$distance_choice" = "mse" ] || [ "$distance_choice" = "cosine" ] || [ "$distance_choice" = "mix" ]; then
-    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${distance_choice}
-else
-    echo "Invalid distance_choice"
-    exit 1
-fi
-
-export eot=0
-if [ "$eot" = 1 ]; then
-    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_eot-1"
-else
-    EXPERIMENT_NAME=${EXPERIMENT_NAME}"_eot-0"
-fi
-
-export target="yingbu" # "yingbu" "mist" "max-mask" "min-mask" "random-mask"
-export id_map_path="test" # map original id to target id
-EXPERIMENT_NAME=${EXPERIMENT_NAME}"_"${target}
-if [ "$target" = "mist" ]; then
-    export target_image_path="./target_images/mist"
-elif [ "$target" = "yingbu" ]; then
-    export target_image_path="./target_images/yingbu"
-elif [ "$target" = "non-target" ]; then
-    export target_image_path="non-target"
-else
-    echo "Invalid target"
-    exit 1
-fi
-
-
-export save_config_dir="./outputs/config_scripts_logs/${EXPERIMENT_NAME}"
+export save_config_dir="./outputs/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
-cp "./scripts/attack/ted.sh" $save_config_dir
+cp "./scripts/attack/faceoff_face_diffuser.sh" $save_config_dir
 
-for person_id in `ls $DATASET_DIR`; do   
-    export CLEAN_ADV_DIR=${DATASET_DIR}"/"${person_id}"/set_B"
-    export ADV_OUTPUT_DIR="outputs/adversarial_images/"$EXPERIMENT_NAME"/"${person_id}
-    echo ${CLEAN_ADV_DIR}
-    echo ${ADV_OUTPUT_DIR}
-    # ------------------------- Train ASPL on set B -------------------------
-    mkdir -p $ADV_OUTPUT_DIR
+python ./attack/faceoff.py \
+    --device $device \
+    --prior_generation_precision "bf16" \
+    --loss_choice $loss_choice \
+    --w $w \
+    --attack_num $attack_num \
+    --alpha $alpha \
+    --eps $eps \
+    --input_size $input_size \
+    --model_input_size $model_input_size \
+    --center_crop 1 \
+    --resample_interpolation "BILINEAR" \
+    --data_dir "./datasets/${data_dir_name}" \
+    --input_name "set_B" \
+    --data_dir_for_target_max $VGGFace2 \
+    --save_dir "./outputs/adversarial_images" \
+    --model_type $model_type \
+    --pretrained_model_name_or_path $pretrained_model_name_or_path \
+    --target_type $target_type \
+    --max_distance_json $map_json_path \
+    --min_eps $min_eps \
+    --update_interval $update_interval \
+    --noise_budget_refiner $noise_budget_refiner \
+    --refiner_type $refiner_type \
+    --mean_filter_size $mean_filter_size \
+    --strong_edge $strong_edge \
+    --weak_edge $weak_edge
     
-    # Generate Protecting Images
-    python3 attacks/ted.py \
-        --model_types $model_types \
-        --device=$device \
-        --seed=1 \
-        --eot $eot \
-        --target $target \
-        --distance_choice $distance_choice \
-        --target_image_path $target_image_path \
-        --pretrained_model_name_or_path=$MODEL_PATH  \
-        --mixed_precision "bf16" \
-        --enable_xformers_memory_efficient_attention \
-        --instance_data_dir_for_adversarial=$CLEAN_ADV_DIR \
-        --output_dir=$ADV_OUTPUT_DIR \
-        --center_crop \
-        --resolution=512 \
-        --max_train_steps=50 \
-        --max_adv_train_steps=6 \
-        --pgd_alpha=5e-3 \
-        --pgd_eps=0.12549019607843137
-        
-done 

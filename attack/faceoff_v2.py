@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import torch
 import torch.nn.functional as F
 import clip
@@ -18,6 +19,10 @@ import random
 import numpy as np
 import time
 import math
+import lpips
+# from lpips import LPIPSLoss
+
+
 seed = 1
 random.seed(seed) # python的随机种子一样
 np.random.seed(seed) # numpy的随机种子一样
@@ -25,7 +30,7 @@ torch.manual_seed(seed) # 为cpu设置随机种子
 torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 
 # 多模型攻击，对多个图像编码器进行攻击
-# 将CLIP对应的距离度量固定为COSINE，VAE对应的距离度量固定为MSE
+# 将CLIP对应的距离度量固定为COSINE
 def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
                 original_data,
@@ -34,13 +39,13 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 attack_num,
                 target_data,
                 trans_clip,
-                trans_vae,
-                w):
+                w,
+                use_lpips,
+                criterion):
     with torch.no_grad():
-        tran_target_vae = trans_vae(target_data)
-        tran_target_clip = trans_clip(target_data)
+        if target_data is not None:
+            tran_target_clip = trans_clip(target_data)
         original_data.requires_grad_(False)
-        tran_original_data_vae = trans_vae(original_data)
         tran_original_data_clip = trans_clip(original_data)
         d_type = perturbed_data.dtype
         perturbed_data = (perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)).to(d_type)
@@ -49,68 +54,94 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
         for k in model_dict.keys():
             model_type = k
             model = model_dict[k]
-            if model_type == 'vae':
-                target_image_embeds = model.encode(tran_target_vae).latent_dist.sample() * model.config.scaling_factor
-                ori_embeds = model.encode(tran_original_data_vae).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'clip':
-                target_image_embeds = model.encode_image(tran_target_clip)
+            if model_type == 'clip':
+                if target_data is not None:
+                    target_image_embeds = model.encode_image(tran_target_clip)
+                else:
+                    target_image_embeds = None
                 ori_embeds = model.encode_image(tran_original_data_clip)
             elif model_type == 'photomaker':
-                target_image_embeds = model(tran_target_clip)
+                if target_data is not None:
+                    target_image_embeds = model(tran_target_clip)
+                else:
+                    target_image_embeds = None
                 ori_embeds = model(tran_original_data_clip)
             elif model_type == 'ipadapter':
-                target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
+                if target_data is not None:
+                    target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
+                else:
+                    target_image_embeds = None
                 ori_embeds = model(tran_original_data_clip, output_hidden_states=True).hidden_states[-2]
             elif model_type == 'face_diffuser':
-                target_image_embeds = model(tran_target_clip.unsqueeze(0))
+                if target_data is not None:
+                    target_image_embeds = model(tran_target_clip.unsqueeze(0))
+                else:
+                    target_image_embeds = None
                 ori_embeds = model(tran_original_data_clip.unsqueeze(0))
             else:
-                raise ValueError('model type choice must be one of vae, clip, and photomaker')
-            target_image_embeds_dict[k] = target_image_embeds
-            origin_image_embeds_dict[k] = ori_embeds
+                raise ValueError('model type choice must be one of clip, and photomaker')
+            if target_image_embeds is not None:
+                target_image_embeds_dict[k] = target_image_embeds
+            if ori_embeds is not None:
+                origin_image_embeds_dict[k] = ori_embeds
     Loss_dict = {}
     for epoch in range(0, attack_num):
         perturbed_data.requires_grad_()
-        tran_perturbed_data_vae = trans_vae(perturbed_data)
         tran_perturbed_data_clip = trans_clip(perturbed_data)
         Loss_x_ = []
         Loss_d_ = []
         for k in model_dict.keys():
             model_type = k
             model = model_dict[k]
-            target_image_embeds = target_image_embeds_dict[k]
+            if target_data is not None:
+                target_image_embeds = target_image_embeds_dict[k]
+            else:
+                target_image_embeds = None
             ori_embeds = origin_image_embeds_dict[k]
-            if model_type == 'vae':
-                adv_image_embeds = model.encode(tran_perturbed_data_vae).latent_dist.sample() * model.config.scaling_factor
-                Loss_x = F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
-                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
-            elif model_type == 'photomaker':
+            if model_type == 'photomaker':
                 adv_image_embeds = model(tran_perturbed_data_clip)
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'clip':
                 adv_image_embeds = model.encode_image(tran_perturbed_data_clip)
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'ipadapter':
                 adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).hidden_states[-2]
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             elif model_type == 'face_diffuser':
                 adv_image_embeds = model(tran_perturbed_data_clip.unsqueeze(0))
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             else:
-                raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker')
+                raise ValueError('model type choice must be one of clip, ipadapter, and photomaker')
+            if w == 1.0:
+                Loss_x = 0
+            else: # target_image_embeds is not None
+                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
+            if w == 0.0:
+                Loss_d = 0
+            else:
+                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             Loss_x_.append(Loss_x)
             Loss_d_.append(Loss_d)
+        if use_lpips == 1:
+            lpips_loss = criterion(perturbed_data, original_data)
+        else:
+            lpips_loss = torch.tensor(0)
         # pdb.set_trace()
-        Loss_x_ = torch.stack(Loss_x_).view(1, len(model_dict.keys()))
-        Loss_d_ = torch.stack(Loss_d_).view(1, len(model_dict.keys()))
-        Loss_ = (1 - w) * Loss_x_ + w * Loss_d_ # [0, 4], 1 + 1 + 1 * (1 + 1) = 4 => 1 - 1 + 1 * (1 - 1) = 0
-        Loss_ = Loss_.mean()
-        # save loss
-        Loss_dict[epoch] = [Loss_.item(), Loss_x_.mean().item(), Loss_d_.mean().item()]
+        if w == 0:
+            Loss_x_ = torch.stack(Loss_x_).view(1, len(model_dict.keys()))
+            Loss_ = Loss_x_
+            Loss_ = Loss_.mean() + lpips_loss
+            # save loss
+            Loss_dict[epoch] = [Loss_.item(), Loss_x_.mean().item(), 0, lpips_loss.item()]
+        elif w == 1:
+            Loss_d_ = torch.stack(Loss_d_).view(1, len(model_dict.keys()))
+            Loss_ = Loss_d_
+            Loss_ = Loss_.mean() + lpips_loss
+            # save loss
+            Loss_dict[epoch] = [Loss_.item(), 0, Loss_d_.mean().item(), lpips_loss.item()]
+        else:
+            Loss_x_ = torch.stack(Loss_x_).view(1, len(model_dict.keys()))
+            Loss_d_ = torch.stack(Loss_d_).view(1, len(model_dict.keys()))
+            Loss_ = (1 - w) * Loss_x_ + w * Loss_d_ + lpips_loss
+            Loss_ = Loss_.mean()
+            # save loss
+            Loss_dict[epoch] = [Loss_.item(), Loss_x_.mean().item(), Loss_d_.mean().item(), lpips_loss.item()]
         if epoch % 10 == 0:
             print("epoch:{} th, Loss:{}".format(epoch, Loss_.item()))
         grad = torch.autograd.grad(Loss_, perturbed_data)[0]
@@ -171,11 +202,14 @@ def main(args):
         if model_type == 'clip':
             model, _ = clip.load(model_path, device=args.device)
             model.to(torch_dtype)
-        elif model_type == 'vae':
-            model = AutoencoderKL.from_pretrained(model_path, subfolder="vae", revision='bf16', torch_dtype=torch_dtype).to(args.device)
         elif model_type == 'photomaker':
             model = PhotoMakerIDEncoder()
             state_dict = torch.load(model_path, map_location="cpu")
+            # Register position_ids buffer if it doesn't exist
+            if "vision_model.embeddings.position_ids" not in state_dict['id_encoder']:
+                num_positions = model.vision_model.embeddings.num_positions
+                position_ids = torch.arange(num_positions).expand((1, -1))
+                state_dict['id_encoder']["vision_model.embeddings.position_ids"] = position_ids
             model.load_state_dict(state_dict['id_encoder'], strict=True)
             model.to(args.device, dtype=torch_dtype)
         elif model_type == 'ipadapter':
@@ -192,7 +226,7 @@ def main(args):
 
     train_aug_for_clip = [
         transforms.Resize(224, interpolation=resample_interpolation),
-        transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
+        transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
     ]
     tensorize_and_normalize = [
         transforms.Normalize([0.5*255]*3,[0.5*255]*3),
@@ -201,20 +235,11 @@ def main(args):
     all_trans_for_clip = transforms.Compose(all_trans_for_clip)
     print("all_trans:{}".format(all_trans_for_clip))
     
-    train_aug_for_vae = [
-        transforms.Resize(512, interpolation=resample_interpolation),
-        transforms.CenterCrop(512) if args.center_crop else transforms.RandomCrop(512),
-    ]
-    tensorize_and_normalize = [
-        transforms.Normalize([0.5*255]*3,[0.5*255]*3),
-    ]
-    all_trans_for_vae = train_aug_for_vae + tensorize_and_normalize
-    all_trans_for_vae = transforms.Compose(all_trans_for_vae)
-    print("all_trans:{}".format(all_trans_for_vae))
     
     adv_image_dir_name = args.adversarial_folder_name
     save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
+    sum_loss_dict = {}
     for person_id in sorted(os.listdir(args.data_dir)):
         person_folder = os.path.join(args.data_dir, person_id, args.input_name)
         clean_data = load_data(person_folder, args.input_size, resampling[args.resample_interpolation])
@@ -232,14 +257,25 @@ def main(args):
             targeted_image_folder = './target_images/colored_mist'
         elif args.target_type == 'gray':
             targeted_image_folder = './target_images/gray'
+        elif args.target_type == "none":
+            targeted_image_folder = ""
         else:
             raise ValueError("target_type out of range")
-        target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
-        
+        if targeted_image_folder != "":
+            target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
+        else:
+            target_data = None
+            
         original_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)
         perturbed_data = clean_data.to(dtype=torch_dtype).to(args.device).requires_grad_(True)
-        target_data = target_data.to(args.device).requires_grad_(False)
+        if target_data is not None:
+            target_data = target_data.to(args.device).requires_grad_(False)
         
+        if args.use_lpips == 1:
+            criterion = LPIPSLoss(device=perturbed_data.device, dtype=perturbed_data.dtype)
+        else:
+            criterion = None
+            
         adv_data, Loss_dict = pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
                 original_data,
@@ -248,8 +284,9 @@ def main(args):
                 args.attack_num,
                 target_data,
                 all_trans_for_clip,
-                all_trans_for_vae,
-                args.w)
+                args.w,
+                args.use_lpips,
+                criterion)
         # save image
         savepath = os.path.join(save_folder, person_id)
         if not os.path.exists(savepath):
@@ -260,7 +297,24 @@ def main(args):
         with open(os.path.join(loss_save_path, "all_loss.txt"), mode="a", encoding="utf-8") as f:
             f.write("Person_id: " + str(person_id) + '\n')
             for key in Loss_dict.keys():
-                f.write("Epoch: " + str(key) + ", Loss: " + str(Loss_dict[key]) + '\n')    
+                f.write("Epoch: " + str(key) + ", Loss: " + str(Loss_dict[key]) + '\n')
+                if key not in sum_loss_dict.keys():
+                    sum_loss_dict[key] = [0, 0, 0, 0]
+                for idx in range(len(Loss_dict[key])):
+                    sum_loss_dict[key][idx] += Loss_dict[key][idx]
+    # 绘制loss曲线
+    fig_keys = ["loss", "loss_x", "loss_d", "loss_lpips"]
+    for k in range(0, len(fig_keys)):
+        loss_list = list()
+        for epoch in sum_loss_dict.keys():
+            loss_list.append(sum_loss_dict[epoch][k]/len(os.listdir(args.data_dir)))
+        plt.plot(range(len(loss_list)), loss_list, label=fig_keys[k], linewidth=1)
+        plt.title('Loss Curve')
+        plt.legend()
+        plt.grid()
+        # plt.show()
+    plt.savefig(os.path.join(loss_save_path, 'loss.png'))
+    plt.close()
     return
 
 def parse_args(input_args=None):
@@ -290,6 +344,13 @@ def parse_args(input_args=None):
         ),
     )
     parser.add_argument(
+        "--use_lpips",
+        type=int,
+        default=1,
+        required=False,
+        help = "use lpips 1, not use lpips 0"
+    )
+    parser.add_argument(
         "--attack_num",
         type=int,
         default=200,
@@ -305,10 +366,10 @@ def parse_args(input_args=None):
     )
     parser.add_argument(
         "--alpha",
-        type=int,
-        default=6,
+        type=float,
+        default=1.6,
         required=True,
-        help = "step size"
+        help = "step size, alpha=eps/10"
     )
     parser.add_argument(
         "--eps",
@@ -325,11 +386,11 @@ def parse_args(input_args=None):
         help = "adversarial image size"
     )
     parser.add_argument(
-        "--center_crop",
+        "--gau_kernel_size",
         type=int,
-        default=1,
+        default=7,
         required=False,
-        help = "center crop or not"
+        help = "gau_kernel_size"
     )
     parser.add_argument(
         "--resample_interpolation",
@@ -369,9 +430,9 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--model_type",
         type=str,
-        default='vae,ipadapter,photomaker,face_diffuser',
+        default='ipadapter,photomaker,face_diffuser',
         required=True,
-        help = "vae, clip, ipadapter, photomaker, face_diffuser"
+        help = "clip, ipadapter, photomaker, face_diffuser"
     )
     parser.add_argument(
         "--pretrained_model_name_or_path",
@@ -401,10 +462,13 @@ def parse_args(input_args=None):
     return args
 
 if __name__ == "__main__":
+    # args = parse_args()
+    # t1 = time.time()
+    # main(args)
+    # t2 = time.time()
+    # print('TIME COST: %.6f'%(t2-t1))
+    # with open(file="time_costs.txt", mode='a') as f:
+    #     f.write(str(t2-t1) + '\n')
+        
     args = parse_args()
-    t1 = time.time()
     main(args)
-    t2 = time.time()
-    print('TIME COST: %.6f'%(t2-t1))
-    with open(file="time_costs.txt", mode='a') as f:
-        f.write(str(t2-t1) + '\n')

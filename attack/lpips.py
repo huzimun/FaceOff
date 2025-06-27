@@ -3,6 +3,39 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 
+def normalize_tensor(in_feat, eps=1e-10):
+    norm_factor = torch.sqrt(torch.sum(in_feat**2, dim=1, keepdim=True))
+    return in_feat/(norm_factor+eps)
+
+def spatial_average(in_tens, keepdim=True):
+    return in_tens.mean([2,3],keepdim=keepdim)
+
+def upsample(in_tens, out_HW=(64,64)): # assumes scale factor is same for H and W
+    in_H, in_W = in_tens.shape[2], in_tens.shape[3]
+    return nn.Upsample(size=out_HW, mode='bilinear', align_corners=False)(in_tens)
+
+class ScalingLayer(nn.Module):
+    def __init__(self):
+        super(ScalingLayer, self).__init__()
+        self.register_buffer('shift', torch.Tensor([-.030,-.088,-.188])[None,:,None,None])
+        self.register_buffer('scale', torch.Tensor([.458,.448,.450])[None,:,None,None])
+
+    def forward(self, inp):
+        # import pdb; pdb.set_trace()
+        return (inp - self.shift.to(inp.device)) / self.scale.to(inp.device)
+
+class NetLinLayer(nn.Module):
+    ''' A single linear layer which does a 1x1 conv '''
+    def __init__(self, chn_in, chn_out=1, use_dropout=False):
+        super(NetLinLayer, self).__init__()
+
+        layers = [nn.Dropout(),] if(use_dropout) else []
+        layers += [nn.Conv2d(chn_in, chn_out, 1, stride=1, padding=0, bias=False),]
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.model(x)
+    
 class AlexNetFeatures(nn.Module):
     def __init__(self, device='cpu'):
         super(AlexNetFeatures, self).__init__()
@@ -19,7 +52,6 @@ class AlexNetFeatures(nn.Module):
             x = layer(x)
             if i in self.layers:
                 outputs.append(x)
-                # print(f"Layer {i} output shape: {x.shape}")  # Debug information
         return outputs
 
 class LPIPSLoss(nn.Module):
@@ -40,17 +72,56 @@ class LPIPSLoss(nn.Module):
         ])
         self.device = device
         self.dtype = dtype
+        self.scaling_layer = ScalingLayer()
+        self.chns = [64,192,384,256,256]
+        self.L = len(self.chns)
+        
+        lpips = True
+        use_dropout=True
+        self.lpips = lpips
+        self.spatial = False
+        if(lpips):
+            self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
+            self.lin1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
+            self.lin2 = NetLinLayer(self.chns[2], use_dropout=use_dropout)
+            self.lin3 = NetLinLayer(self.chns[3], use_dropout=use_dropout)
+            self.lin4 = NetLinLayer(self.chns[4], use_dropout=use_dropout)
+            self.lins = [self.lin0,self.lin1,self.lin2,self.lin3,self.lin4]
+            self.lins = nn.ModuleList(self.lins)
 
     def forward(self, x, y):
-        x_feats = self.alex_features(x.to(self.device).to(self.dtype))
-        y_feats = self.alex_features(y.to(self.device).to(self.dtype))
+        normalize = True
+        import pdb; pdb.set_trace()
+        if normalize: # turn on this flag if input is [0,255] so it can be adjusted to [-1, +1]
+            in0 = 2 * (x / 255.0) - 1
+            in1 = 2 * (y / 255.0) - 1
+        import pdb; pdb.set_trace()
+        # v0.0 - original release had a bug, where input was not scaled
+        # in0_input, in1_input = (self.scaling_layer(in0), self.scaling_layer(in1)) if self.version=='0.1' else (in0, in1)
+        in0_input, in1_input = (self.scaling_layer(in0), self.scaling_layer(in1))
+        outs0, outs1 = self.alex_features.forward(in0_input), self.alex_features.forward(in1_input)
+        feats0, feats1, diffs = {}, {}, {}
 
-        loss = 0
-        for xf, yf, lin in zip(x_feats, y_feats, self.lin_layers):
-            diff = F.normalize(xf, p=2, dim=1) - F.normalize(yf, p=2, dim=1)
-            loss += lin(diff ** 2).mean()
+        for kk in range(self.L):
+            feats0[kk], feats1[kk] = normalize_tensor(outs0[kk]), normalize_tensor(outs1[kk])
+            diffs[kk] = (feats0[kk]-feats1[kk])**2
 
-        return loss
+        if(self.lpips):
+            if(self.spatial):
+                res = [upsample(self.lins[kk](diffs[kk]), out_HW=in0.shape[2:]) for kk in range(self.L)]
+            else:
+                res = [spatial_average(self.lins[kk](diffs[kk]), keepdim=True) for kk in range(self.L)]
+        else:
+            if(self.spatial):
+                res = [upsample(diffs[kk].sum(dim=1,keepdim=True), out_HW=in0.shape[2:]) for kk in range(self.L)]
+            else:
+                res = [spatial_average(diffs[kk].sum(dim=1,keepdim=True), keepdim=True) for kk in range(self.L)]
+
+        val = 0
+        for l in range(self.L):
+            val += res[l]
+        
+        return val
 
 # 使用示例：
 if __name__ == '__main__':

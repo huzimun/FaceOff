@@ -5,7 +5,7 @@ export adversarial_input_dir="./outputs/adversarial_images/${adversarial_folder_
 export customization_output_dir="./outputs/customization_outputs/${adversarial_folder_name}"
 export evaluation_output_dir="./outputs/evaluation_outputs/${adversarial_folder_name}"
 export original_output_dir="./outputs/customization_outputs/fastcomposer_VGGFace2"
-export prompts="a_magazine_cover_of_a_man_"
+export prompts="a_magazine_cover_of_a_person_"
 export VGGFace2="/data1/humw/Datasets/VGGFace2"
 export clip_model_name_or_path="/data1/humw/Codes/Anti-DreamBooth/evaluations/my_clip/ViT-B-32.pt"
 echo $prompts

@@ -13,15 +13,24 @@ import json
 import pdb
 import cv2
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
-from photomaker_clip import PhotoMakerIDEncoder
-from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
+
+from photomaker_clip import PhotoMakerIDEncoder, PhotoMakerIDEncoder1
+from face_diffuser_clip import FaceDiffuserCLIPImageEncoder, FaceDiffuserCLIPImageEncoder1
 import random
 import numpy as np
 import time
 import math
-import lpips
-# from lpips import LPIPSLoss
+import sys
 
+# 将ip_adapter加入路径
+sys.path.append('/data1/humw/Codes/FaceOff/customization/target_model/IP-Adapter/')
+from ip_adapter.resampler import Resampler
+from ip_adapter.ip_adapter import ImageProjModel
+
+# from lpips import LPIPS as LP
+# from lpips import LPIPSLoss
+# import lpips
+from lpips_pytorch import LPIPS, lpips
 
 seed = 1
 random.seed(seed) # python的随机种子一样
@@ -41,7 +50,9 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 trans_clip,
                 w,
                 use_lpips,
-                criterion):
+                criterion,
+                ipadapterplus_image_proj_model,
+                ipadapter_image_proj_model):
     with torch.no_grad():
         if target_data is not None:
             tran_target_clip = trans_clip(target_data)
@@ -68,10 +79,29 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 ori_embeds = model(tran_original_data_clip)
             elif model_type == 'ipadapter':
                 if target_data is not None:
-                    target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
+                    target_image_embeds = model(tran_target_clip).image_embeds
+                    if ipadapter_image_proj_model is not None:
+                        proj_target_image_embeds = ipadapter_image_proj_model(target_image_embeds)
+                        target_image_embeds = proj_target_image_embeds
                 else:
                     target_image_embeds = None
+                ori_embeds = model(tran_original_data_clip).image_embeds
+                if ipadapter_image_proj_model is not None:
+                    proj_ori_embeds = ipadapter_image_proj_model(ori_embeds)
+                    ori_embeds = proj_ori_embeds
+            elif model_type == 'ipadapterplus':
+                if target_data is not None:
+                    target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
+                    if ipadapterplus_image_proj_model is not None:
+                        proj_target_image_embeds = ipadapterplus_image_proj_model(target_image_embeds)
+                        target_image_embeds = proj_target_image_embeds
+                else:
+                    target_image_embeds = None
+                # pdb.set_trace()
                 ori_embeds = model(tran_original_data_clip, output_hidden_states=True).hidden_states[-2]
+                if ipadapterplus_image_proj_model is not None:
+                    proj_ori_embeds = ipadapterplus_image_proj_model(ori_embeds)
+                    ori_embeds = proj_ori_embeds
             elif model_type == 'face_diffuser':
                 if target_data is not None:
                     target_image_embeds = model(tran_target_clip.unsqueeze(0))
@@ -102,12 +132,20 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 adv_image_embeds = model(tran_perturbed_data_clip)
             elif model_type == 'clip':
                 adv_image_embeds = model.encode_image(tran_perturbed_data_clip)
-            elif model_type == 'ipadapter':
+            elif model_type == 'ipadapterplus':
                 adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).hidden_states[-2]
+                if ipadapterplus_image_proj_model is not None:
+                    proj_adv_image_embeds = ipadapterplus_image_proj_model(adv_image_embeds)
+                    adv_image_embeds = proj_adv_image_embeds
+            elif model_type == 'ipadapter':
+                adv_image_embeds = model(tran_perturbed_data_clip).image_embeds
+                if ipadapter_image_proj_model is not None:
+                    proj_adv_image_embeds = ipadapter_image_proj_model(adv_image_embeds)
+                    adv_image_embeds = proj_adv_image_embeds
             elif model_type == 'face_diffuser':
                 adv_image_embeds = model(tran_perturbed_data_clip.unsqueeze(0))
             else:
-                raise ValueError('model type choice must be one of clip, ipadapter, and photomaker')
+                raise ValueError('model type choice must be one of clip, ipadapterplus, and photomaker')
             if w == 1.0:
                 Loss_x = 0
             else: # target_image_embeds is not None
@@ -118,8 +156,11 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
             Loss_x_.append(Loss_x)
             Loss_d_.append(Loss_d)
+        # pdb.set_trace()
         if use_lpips == 1:
-            lpips_loss = criterion(perturbed_data, original_data)
+            # lpips_loss = criterion(perturbed_data, original_data)
+            lpips_loss = criterion(tran_perturbed_data_clip, tran_original_data_clip)[0][0][0][0] / tran_perturbed_data_clip.shape[0]
+            # print("lpips_loss: ", lpips_loss)
         else:
             lpips_loss = torch.tensor(0)
         # pdb.set_trace()
@@ -203,7 +244,10 @@ def main(args):
             model, _ = clip.load(model_path, device=args.device)
             model.to(torch_dtype)
         elif model_type == 'photomaker':
-            model = PhotoMakerIDEncoder()
+            if args.mode == "projected":
+                model = PhotoMakerIDEncoder()
+            else: # no-projected
+                model = PhotoMakerIDEncoder1()
             state_dict = torch.load(model_path, map_location="cpu")
             # Register position_ids buffer if it doesn't exist
             if "vision_model.embeddings.position_ids" not in state_dict['id_encoder']:
@@ -212,13 +256,46 @@ def main(args):
                 state_dict['id_encoder']["vision_model.embeddings.position_ids"] = position_ids
             model.load_state_dict(state_dict['id_encoder'], strict=True)
             model.to(args.device, dtype=torch_dtype)
+        elif model_type == 'ipadapterplus':
+            ipadapter_path = "/data1/humw/Pretrains/IP-Adapter/models/image_encoder"
+            model = CLIPVisionModelWithProjection.from_pretrained(ipadapter_path).to(args.device, dtype=torch_dtype).eval().requires_grad_(False)
+            if args.mode == "projected":
+                # 映射层参数参考IPAdapterPlusXL中的默认配置
+                image_proj_model = Resampler(
+                    dim=1280,
+                    depth=4,
+                    dim_head=64,
+                    heads=20,
+                    num_queries= 16, # self.num_tokens,
+                    embedding_dim= 1280, # self.image_encoder.config.hidden_size,
+                    output_dim=2048,#self.pipe.unet.config.cross_attention_dim,
+                    ff_mult=4,
+                ).to(dtype=torch_dtype)
+                # 加载投影层参数
+                state_dict = torch.load("/data1/humw/Pretrains/IP-Adapter/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.bin", map_location="cpu")
+                image_proj_model.load_state_dict(state_dict["image_proj"])
+                ipadapterplus_image_proj_model = image_proj_model.to(args.device, dtype=torch_dtype).eval().requires_grad_(False)
+            else:
+                ipadapterplus_image_proj_model = None
         elif model_type == 'ipadapter':
             model = CLIPVisionModelWithProjection.from_pretrained(model_path).to(args.device, dtype=torch_dtype)
+            if args.mode == "projected":
+                ipadapter_image_proj_model = ImageProjModel(
+                    cross_attention_dim= 2048, #self.pipe.unet.config.cross_attention_dim,
+                    clip_embeddings_dim=1280, #self.image_encoder.config.projection_dim,
+                    clip_extra_context_tokens=4, #self.num_tokens,
+                ).to(args.device, dtype=torch_dtype)
+            else:
+                ipadapter_image_proj_model = None
         elif model_type == "face_diffuser":
-            model = FaceDiffuserCLIPImageEncoder.from_pretrained(model_path,).to(args.device, dtype=torch_dtype)
+            if args.mode == "projected": # 默认是映射后的输出
+                model = FaceDiffuserCLIPImageEncoder.from_pretrained(model_path,).to(args.device, dtype=torch_dtype)
+            else: # "no-projected"
+                model = FaceDiffuserCLIPImageEncoder1.from_pretrained(model_path,).to(args.device, dtype=torch_dtype)
         else:
             raise ValueError("model_type out of range")
         model_dict[model_type] = model
+        # pdb.set_trace()
     if args.resample_interpolation == 'BILINEAR':
         resample_interpolation = transforms.InterpolationMode.BILINEAR
     else:
@@ -235,7 +312,13 @@ def main(args):
     all_trans_for_clip = transforms.Compose(all_trans_for_clip)
     print("all_trans:{}".format(all_trans_for_clip))
     
-    
+    if args.use_lpips == 1:
+        # criterion = LPIPSLoss(device=args.device, dtype=torch_dtype)
+        # criterion = LP(net='alex', device=args.device, model_path="/data1/humw/anaconda3/envs/faceoff_v2/lib/python3.10/site-packages/lpips/weights/v0.1/alex.pth")
+        criterion = LPIPS(net_type="alex").to(args.device)
+    else:
+        criterion = None
+        
     adv_image_dir_name = args.adversarial_folder_name
     save_folder = os.path.join(args.save_dir, adv_image_dir_name)
     resampling = {'NEAREST': 0, 'BILINEAR': 2, 'BICUBIC': 3}
@@ -270,11 +353,6 @@ def main(args):
         perturbed_data = clean_data.to(dtype=torch_dtype).to(args.device).requires_grad_(True)
         if target_data is not None:
             target_data = target_data.to(args.device).requires_grad_(False)
-        
-        if args.use_lpips == 1:
-            criterion = LPIPSLoss(device=perturbed_data.device, dtype=perturbed_data.dtype)
-        else:
-            criterion = None
             
         adv_data, Loss_dict = pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
@@ -286,7 +364,9 @@ def main(args):
                 all_trans_for_clip,
                 args.w,
                 args.use_lpips,
-                criterion)
+                criterion,
+                ipadapterplus_image_proj_model,
+                ipadapter_image_proj_model)
         # save image
         savepath = os.path.join(save_folder, person_id)
         if not os.path.exists(savepath):
@@ -325,6 +405,13 @@ def parse_args(input_args=None):
         required=True,
         default="adversarial_folder_name",
         help="adversarial_folder_name",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="projected",
+        required=True,
+        help="projected or no-projected",
     )
     parser.add_argument(
         "--device",
@@ -430,9 +517,9 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--model_type",
         type=str,
-        default='ipadapter,photomaker,face_diffuser',
+        default='ipadapterplus,photomaker,face_diffuser',
         required=True,
-        help = "clip, ipadapter, photomaker, face_diffuser"
+        help = "clip, ipadapterplus, photomaker, face_diffuser"
     )
     parser.add_argument(
         "--pretrained_model_name_or_path",
@@ -460,6 +547,7 @@ def parse_args(input_args=None):
     else:
         args = parser.parse_args()
     return args
+
 
 if __name__ == "__main__":
     # args = parse_args()

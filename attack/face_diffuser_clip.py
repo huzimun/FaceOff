@@ -90,6 +90,53 @@ class FaceDiffuserCLIPImageEncoder(CLIPPreTrainedModel):
         object_embeds = object_embeds.view(b, num_objects, 1, -1)
         return object_embeds
 
+class FaceDiffuserCLIPImageEncoder1(CLIPPreTrainedModel):
+    @staticmethod
+    def from_pretrained(
+        global_model_name_or_path,
+    ):
+        model = CLIPModel.from_pretrained(global_model_name_or_path)
+        vision_model = model.vision_model
+        visual_projection = model.visual_projection
+        vision_processor = T.Normalize(
+            (0.48145466, 0.4578275, 0.40821073),
+            (0.26862954, 0.26130258, 0.27577711),
+        )
+        return FaceDiffuserCLIPImageEncoder(
+            vision_model,
+            visual_projection,
+            vision_processor,
+        )
+
+    def __init__(
+        self,
+        vision_model,
+        visual_projection,
+        vision_processor,
+    ):
+        super().__init__(vision_model.config)
+        self.vision_model = vision_model
+        self.visual_projection = visual_projection
+        self.vision_processor = vision_processor
+
+        self.image_size = vision_model.config.image_size
+
+    def forward(self, object_pixel_values):
+        b, num_objects, c, h, w = object_pixel_values.shape
+
+        object_pixel_values = object_pixel_values.view(b * num_objects, c, h, w)
+
+        if h != self.image_size or w != self.image_size:
+            h, w = self.image_size, self.image_size
+            object_pixel_values = F.interpolate(
+                object_pixel_values, (h, w), mode="bilinear", antialias=True
+            )
+
+        object_pixel_values = self.vision_processor(object_pixel_values)
+        object_embeds = self.vision_model(object_pixel_values)[1]
+        # object_embeds = self.visual_projection(object_embeds)
+        # object_embeds = object_embeds.view(b, num_objects, 1, -1)
+        return object_embeds
 
 def scatter_object_embeddings(
     inputs_embeds,

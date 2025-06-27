@@ -1,4 +1,4 @@
-export experiment_name="IDProtector_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_cosine_eot-0_non-target_agm-2_norm-0"
+export experiment_name="TED_agu-eot_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-1_yingbu_agm-2_norm-0"
 export dataset_dir="./outputs/adversarial_images"
 
 python3 ./adversarial_purification/noise.py \
@@ -6,11 +6,11 @@ python3 ./adversarial_purification/noise.py \
     --dataset_dir "./outputs/adversarial_images" \
     --noise 0.1
 
-export experiment_name="IDProtector_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_cosine_eot-0_non-target_agm-2_norm-0-gaussian-noise0.1"
+export experiment_name="TED_agu-eot_conda-photomaker_VGGFace2_vae15-ipadapter-photomaker_mix_eot-1_yingbu_agm-2_norm-0-gaussian-noise0.1"
 export dataset_dir="./outputs/adversarial_images"
 
 python3 ./adversarial_purification/purification.py \
-    --device "cuda:3" \
+    --device "cuda:1" \
     --experiment_name ${experiment_name} \
     --dataset_dir ${dataset_dir} \
     --transform_sr 1 \

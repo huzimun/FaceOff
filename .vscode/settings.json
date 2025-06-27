@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./customization/target_model/IP-Adapter"
+    ]
+}

@@ -80,14 +80,14 @@ class IPAdapter:
         self.clip_image_processor = CLIPImageProcessor()
         # image proj model
         self.image_proj_model = self.init_proj()
-
+        # import pdb; pdb.set_trace()
         self.load_ip_adapter()
 
     def init_proj(self):
         image_proj_model = ImageProjModel(
-            cross_attention_dim=self.pipe.unet.config.cross_attention_dim,
-            clip_embeddings_dim=self.image_encoder.config.projection_dim,
-            clip_extra_context_tokens=self.num_tokens,
+            cross_attention_dim=self.pipe.unet.config.cross_attention_dim, # sdxl 2048
+            clip_embeddings_dim=self.image_encoder.config.projection_dim, # sdxl 1280
+            clip_extra_context_tokens=self.num_tokens, # sdxl 4
         ).to(self.device, dtype=torch.float16)
         return image_proj_model
 

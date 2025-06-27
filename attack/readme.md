@@ -1,6 +1,6 @@
-- ensemble_faceoff.py和ensemble_faceoff_mse_cos.py尝试复现IDProtector，只攻击图像编码器。相较于IDProtector，我额外考虑了VAE
-    - ensemble_faceoff.py是所有的图像编码器公用一种距离度量
-    - ensemble_faceoff_mse_cos.py是对VAE使用MSE距离度量，对CLIP使用余弦距离度量
-- ensemble_faceoff_mse_cos_unet.py尝试复现Anti-Reference
-- faceoff_v1.py
-- faceoff_v2.py
+- ensemble_faceoff.py和ensemble_faceoff_mse_cos.py：尝试复现IDProtector，只攻击图像编码器。相较于IDProtector，我额外考虑了VAE
+    - ensemble_faceoff.py：所有的图像编码器公用一种距离度量
+    - ensemble_faceoff_mse_cos.py：对VAE使用MSE距离度量，对CLIP使用余弦距离度量
+- ensemble_faceoff_mse_cos_unet.py：尝试复现Anti-Reference
+- faceoff_v1.py：ICME版本代码，攻击单个图像编码器，仍保留了图像边缘refiner，但ICME版本论文未使用refiner
+- faceoff_v2.py：Information Fusion版本代码，攻击多个图像编码器，在ensemble_faceoff_mse_cos.py基础上修改完善而来

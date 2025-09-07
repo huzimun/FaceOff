@@ -187,7 +187,7 @@ def main(args):
         base_model_path,
         torch_dtype=torch.bfloat16,
         use_safetensors=True,
-        variant="fp16",
+        variant="bf16",
     ).to(device)
     print("Stable Diffusion XL have been loaded !")
     pipe.load_photomaker_adapter(
@@ -228,19 +228,23 @@ def main(args):
             print("person_id_name:{}".format(person_id_name))
             print("prompt:{}".format(prompt))
             negative_prompt = ""
-            images = pipe(
-                prompt=prompt,
-                input_id_images=input_id_images,
-                negative_prompt=negative_prompt,
-                num_images_per_prompt=args.num_images_per_prompt,
-                num_inference_steps=num_steps,
-                start_merge_step=start_merge_step,
-                generator=generator,
-                height=args.height,
-                width=args.width,
-                gaussian_filter=args.gaussian_filter,
-                hflip=args.hflip
-            ).images
+            images = list()
+            for image in input_id_images:
+                num_images_per_prompt = int(args.num_images_per_prompt / len(input_id_images))
+                tmp_images = pipe(
+                    prompt=prompt,
+                    input_id_images=[image],
+                    negative_prompt=negative_prompt,
+                    num_images_per_prompt=num_images_per_prompt,
+                    num_inference_steps=num_steps,
+                    start_merge_step=start_merge_step,
+                    generator=generator,
+                    height=args.height,
+                    width=args.width,
+                    gaussian_filter=args.gaussian_filter,
+                    hflip=args.hflip
+                ).images
+                images.extend(tmp_images)
             # save images
             prompt_name = prompt.replace(' ', '_')
             save_folder = os.path.join(args.save_dir, person_id_name, prompt_name)
@@ -252,6 +256,7 @@ def main(args):
             for idx, image in enumerate(images):
                 save_path = os.path.join(save_folder, f"{i}_{idx}.png")
                 image.save(save_path)
+            # 
     del pipe
 
 if __name__ == "__main__":

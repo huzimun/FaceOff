@@ -103,3 +103,26 @@ class PhotoMakerIDEncoder(CLIPVisionModelWithProjection):
         id_embeds = torch.cat((id_embeds, id_embeds_2), dim=-1)
 
         return id_embeds
+
+# modified ID Encoder of PhotoMaker, batch size dimension is ignored and default to 1, the fuse module is ignored
+class PhotoMakerIDEncoder1(CLIPVisionModelWithProjection):
+    def __init__(self):
+        super().__init__(CLIPVisionConfig(**VISION_CONFIG_DICT))
+        self.visual_projection_2 = nn.Linear(1024, 1280, bias=False)
+        self.fuse_module = FuseModule(2048)
+
+    def forward(self, id_pixel_values):
+        num_inputs, c, h, w = id_pixel_values.shape
+        id_pixel_values = id_pixel_values.view(num_inputs, c, h, w)
+
+        shared_id_embeds = self.vision_model(id_pixel_values)[1]
+        # id_embeds = self.visual_projection(shared_id_embeds)
+        # id_embeds_2 = self.visual_projection_2(shared_id_embeds)
+
+        # id_embeds = id_embeds.view(num_inputs, 1, -1)
+        # id_embeds_2 = id_embeds_2.view(num_inputs, 1, -1)
+
+        # id_embeds = torch.cat((id_embeds, id_embeds_2), dim=-1)
+
+        return shared_id_embeds
+    

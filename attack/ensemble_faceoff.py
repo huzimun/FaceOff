@@ -13,11 +13,15 @@ import pdb
 import cv2
 from transformers.models.clip.modeling_clip import CLIPVisionModelWithProjection
 from photomaker_clip import PhotoMakerIDEncoder
+from photomaker_clip import PhotoMakerIDEncoder1
 from face_diffuser_clip import FaceDiffuserCLIPImageEncoder
 import random
 import numpy as np
 import time
 import math
+from ip_adapter.resampler import Resampler
+from ip_adapter.ip_adapter import ImageProjModel
+
 seed = 1
 random.seed(seed) # python的随机种子一样
 np.random.seed(seed) # numpy的随机种子一样
@@ -35,7 +39,8 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 trans_clip,
                 trans_vae,
                 loss_choice,
-                w):
+                w,
+                image_proj_model_dict):
     with torch.no_grad():
         tran_target_vae = trans_vae(target_data)
         tran_target_clip = trans_clip(target_data)
@@ -52,15 +57,28 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
             if model_type == 'vae':
                 target_image_embeds = model.encode(tran_target_vae).latent_dist.sample() * model.config.scaling_factor
                 ori_embeds = model.encode(tran_original_data_vae).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'clip':
+            elif model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
                 target_image_embeds = model.encode_image(tran_target_clip)
                 ori_embeds = model.encode_image(tran_original_data_clip)
             elif model_type == 'photomaker':
                 target_image_embeds = model(tran_target_clip)
                 ori_embeds = model(tran_original_data_clip)
-            elif model_type == 'ipadapter':
+            elif model_type == 'ipadapter-plus':
                 target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
                 ori_embeds = model(tran_original_data_clip, output_hidden_states=True).hidden_states[-2]
+                if image_proj_model_dict[model_type] is not None:
+                    proj_original_image_embeds = image_proj_model_dict[model_type](ori_embeds)
+                    ori_embeds = proj_original_image_embeds
+                    proj_target_image_embeds = image_proj_model_dict[model_type](target_image_embeds)
+                    target_image_embeds = proj_target_image_embeds
+            elif model_type == 'ipadapter':
+                target_image_embeds = model(tran_target_clip, output_hidden_states=True).pooler_output
+                ori_embeds = model(tran_original_data_clip, output_hidden_states=True).pooler_output
+                if image_proj_model_dict[model_type] is not None:
+                    proj_original_image_embeds = image_proj_model_dict[model_type](ori_embeds)
+                    ori_embeds = proj_original_image_embeds
+                    proj_target_image_embeds = image_proj_model_dict[model_type](target_image_embeds)
+                    target_image_embeds = proj_target_image_embeds
             elif model_type == 'face_diffuser':
                 target_image_embeds = model(tran_target_clip.unsqueeze(0))
                 ori_embeds = model(tran_original_data_clip.unsqueeze(0))
@@ -68,6 +86,7 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 raise ValueError('model type choice must be one of vae, clip, and photomaker')
             target_image_embeds_dict[k] = target_image_embeds
             origin_image_embeds_dict[k] = ori_embeds
+    # pdb.set_trace()
     Loss_dict = {}
     for epoch in range(0, attack_num):
         perturbed_data.requires_grad_()
@@ -86,10 +105,18 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
                 adv_image_embeds = model.encode(tran_perturbed_data_vae).latent_dist.sample() * model.config.scaling_factor
             elif model_type == 'photomaker':
                 adv_image_embeds = model(tran_perturbed_data_clip)
-            elif model_type == 'clip':
+            elif model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
                 adv_image_embeds = model.encode_image(tran_perturbed_data_clip)
-            elif model_type == 'ipadapter':
+            elif model_type == 'ipadapter-plus':
                 adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).hidden_states[-2]
+                if image_proj_model_dict[model_type] is not None:
+                    proj_original_image_embeds = image_proj_model_dict[model_type](adv_image_embeds)
+                    adv_image_embeds = proj_original_image_embeds
+            elif model_type == 'ipadapter':
+                adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).pooler_output
+                if image_proj_model_dict[model_type] is not None:
+                    proj_original_image_embeds = image_proj_model_dict[model_type](adv_image_embeds)
+                    adv_image_embeds = proj_original_image_embeds
             elif model_type == 'face_diffuser':
                 adv_image_embeds = model(tran_perturbed_data_clip.unsqueeze(0))
             else:
@@ -164,22 +191,60 @@ def main(args):
     model_type_list = args.model_type.split(',')
     model_path_list = args.pretrained_model_name_or_path.split(',')
     model_dict = {} # key为模型类型，value为模型
+    image_proj_model_dict = {} # key为ipadapter模型类型，value为投影层模型
     for idx in range(0, len(model_type_list)):
         print("model_type:{}, pretrained_model_name_or_path:{}".format(model_type_list[idx], model_path_list[idx]))
         model_type = model_type_list[idx]
         model_path = model_path_list[idx]
-        if model_type == 'clip':
+        if model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
             model, _ = clip.load(model_path, device=args.device)
             model.to(torch_dtype)
         elif model_type == 'vae':
             model = AutoencoderKL.from_pretrained(model_path, subfolder="vae", revision='bf16', torch_dtype=torch_dtype).to(args.device)
         elif model_type == 'photomaker':
-            model = PhotoMakerIDEncoder()
-            state_dict = torch.load(model_path, map_location="cpu")
-            model.load_state_dict(state_dict['id_encoder'], strict=True)
-            model.to(args.device, dtype=torch_dtype)
-        elif model_type == 'ipadapter':
-            model = CLIPVisionModelWithProjection.from_pretrained(model_path).to(args.device, dtype=torch_dtype)
+            if args.mode == "idprotector": # no visual projection
+                model = PhotoMakerIDEncoder1()
+                state_dict = torch.load(model_path, map_location="cpu")
+                model.load_state_dict(state_dict['id_encoder'], strict=False)
+                model.to(args.device, dtype=torch_dtype)
+            else:
+                model = PhotoMakerIDEncoder()
+                state_dict = torch.load(model_path, map_location="cpu")
+                model.load_state_dict(state_dict['id_encoder'], strict=False)
+                model.to(args.device, dtype=torch_dtype)
+        elif model_type == 'ipadapter' or model_type == 'ipadapter-plus':
+            # pdb.set_trace()
+            # model = CLIPVisionModelWithProjection.from_pretrained(model_path).to(args.device, dtype=torch_dtype)
+            # ipadapter_path = "/data1/humw/Pretrains/IP-Adapter/models/image_encoder"
+            # model = CLIPVisionModelWithProjection.from_pretrained(ipadapter_path).to(dtype=torch_dtype).eval().requires_grad_(False)
+            if args.mode == "idprotector": # with visual projection
+                # load SDXL pipeline
+                from ip_adapter.custom_pipelines import StableDiffusionXLCustomPipeline
+                from ip_adapter import IPAdapterPlusXL
+                from ip_adapter import IPAdapterXL
+                
+                base_model_path = "/home/humw/Pretrains/stabilityai/stable-diffusion-xl-base-1.0"
+                pipe = StableDiffusionXLCustomPipeline.from_pretrained(
+                    base_model_path,
+                    # torch_dtype=torch.float16,
+                    add_watermarker=False,
+                )
+                # 加载投影层参数
+                if model_type == "ipadapter-plus":
+                    ip_ckpt = "/home/humw/Pretrains/h94/IP-Adapter/sdxl_models/ip-adapter-plus-face_sdxl_vit-h.bin"
+                    ip_model = IPAdapterPlusXL(pipe, model_path, ip_ckpt, "cpu", num_tokens=16)
+                    image_proj_model = ip_model.image_proj_model.to(args.device).to(dtype=torch_dtype)
+                elif model_type == "ipadapter":
+                    ip_ckpt = "/home/humw/Pretrains/h94/IP-Adapter/sdxl_models/ip-adapter_sdxl.bin"
+                    ip_model = IPAdapterXL(pipe, model_path, ip_ckpt, "cpu",)
+                    image_proj_model = ip_model.image_encoder.visual_projection.to(args.device).to(dtype=torch_dtype)
+                else:
+                    raise ValueError("model_type out of range")
+                model = ip_model.image_encoder.vision_model.to(args.device).to(dtype=torch_dtype)
+                image_proj_model_dict[model_type] = image_proj_model
+                del pipe
+            else:
+                image_proj_model = None
         elif model_type == "face_diffuser":
             model = FaceDiffuserCLIPImageEncoder.from_pretrained(model_path,).to(args.device, dtype=torch_dtype)
         else:
@@ -190,6 +255,14 @@ def main(args):
     else:
         resample_interpolation = transforms.InterpolationMode.BICUBIC
 
+    gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
+    defense_transform = [
+    ]
+    if args.transform_hflip:
+        defense_transform = defense_transform + [transforms.RandomHorizontalFlip(p=0.5)]
+    if args.transform_gau:
+        defense_transform = [gau_filter] + defense_transform
+        
     train_aug_for_clip = [
         transforms.Resize(224, interpolation=resample_interpolation),
         transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
@@ -197,7 +270,7 @@ def main(args):
     tensorize_and_normalize = [
         transforms.Normalize([0.5*255]*3,[0.5*255]*3),
     ]
-    all_trans_for_clip = train_aug_for_clip + tensorize_and_normalize
+    all_trans_for_clip = train_aug_for_clip + defense_transform + tensorize_and_normalize
     all_trans_for_clip = transforms.Compose(all_trans_for_clip)
     print("all_trans:{}".format(all_trans_for_clip))
     
@@ -243,14 +316,15 @@ def main(args):
         adv_data, Loss_dict = pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
                 original_data,
-                args.alpha,
+                args.alpha*255,
                 args.eps,
                 args.attack_num,
                 target_data,
                 all_trans_for_clip,
                 all_trans_for_vae,
                 args.loss_choice,
-                args.w)
+                args.w,
+                image_proj_model_dict=image_proj_model_dict)
         # save image
         savepath = os.path.join(save_folder, person_id)
         if not os.path.exists(savepath):
@@ -266,6 +340,12 @@ def main(args):
 
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="adversarial attacks for customization models")
+    parser.add_argument(
+        "--mode", 
+        type=str, 
+        default="idprotector", 
+        help="idprotector use projection image embeds for ip-adapter"
+    )
     parser.add_argument(
         "--adversarial_folder_name",
         type=str,
@@ -313,8 +393,8 @@ def parse_args(input_args=None):
     )
     parser.add_argument(
         "--alpha",
-        type=int,
-        default=6,
+        type=float,
+        default=0.005,
         required=True,
         help = "step size"
     )
@@ -338,6 +418,27 @@ def parse_args(input_args=None):
         default=1,
         required=False,
         help = "center crop or not"
+    )
+    parser.add_argument(
+        "--transform_hflip",
+        type=int,
+        default=0,
+        required=False,
+        help = "hflip or not"
+    )
+    parser.add_argument(
+        "--transform_gau",
+        type=int,
+        default=0,
+        required=False,
+        help = "gaussian filter or not"
+    )
+    parser.add_argument(
+        "--gau_kernel_size",
+        type=int,
+        default=7,
+        required=False,
+        help = "gaussian kernel size"
     )
     parser.add_argument(
         "--resample_interpolation",
@@ -410,9 +511,11 @@ def parse_args(input_args=None):
 
 if __name__ == "__main__":
     args = parse_args()
-    t1 = time.time()
     main(args)
-    t2 = time.time()
-    print('TIME COST: %.6f'%(t2-t1))
-    with open(file="time_costs.txt", mode='a') as f:
-        f.write(str(t2-t1) + '\n')
+    # args = parse_args()
+    # t1 = time.time()
+    # main(args)
+    # t2 = time.time()
+    # print('TIME COST: %.6f'%(t2-t1))
+    # with open(file="time_costs.txt", mode='a') as f:
+    #     f.write(str(t2-t1) + '\n')

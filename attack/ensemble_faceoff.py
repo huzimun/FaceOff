@@ -31,106 +31,123 @@ torch.cuda.manual_seed_all(seed) # 为所有的gpu设置随机种子
 # 多模型攻击，对多个图像编码器进行攻击
 def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
-                original_data,
+                origin_data,
                 alpha,
                 eps,
                 attack_num,
                 target_data,
-                trans_clip,
-                trans_vae,
+                eot_trans_list,
                 loss_choice,
                 w,
                 image_proj_model_dict):
     with torch.no_grad():
-        tran_target_vae = trans_vae(target_data)
-        tran_target_clip = trans_clip(target_data)
-        original_data.requires_grad_(False)
-        tran_original_data_vae = trans_vae(original_data)
-        tran_original_data_clip = trans_clip(original_data)
+        origin_data.requires_grad_(False)
+        eot_trans_target_data_list = list()
+        eot_trans_origin_data_list = list()
+        for trans in eot_trans_list:
+            tran_target_data = trans(target_data)
+            tran_origin_data = trans(origin_data)
+            eot_trans_target_data_list.append(tran_target_data)
+            eot_trans_origin_data_list.append(tran_origin_data)
         d_type = perturbed_data.dtype
         perturbed_data = (perturbed_data + (torch.rand(*perturbed_data.shape)*2*eps-eps).to(perturbed_data.device)).to(d_type)
-        target_image_embeds_dict = {} # 目标图像的编码列表
-        origin_image_embeds_dict = {} # 原始图像的编码列表
+        target_embeds_dict = {} # 目标图像的编码列表
+        origin_embeds_dict = {} # 原始图像的编码列表
         for k in model_dict.keys():
             model_type = k
             model = model_dict[k]
-            if model_type == 'vae':
-                target_image_embeds = model.encode(tran_target_vae).latent_dist.sample() * model.config.scaling_factor
-                ori_embeds = model.encode(tran_original_data_vae).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
-                target_image_embeds = model.encode_image(tran_target_clip)
-                ori_embeds = model.encode_image(tran_original_data_clip)
-            elif model_type == 'photomaker':
-                target_image_embeds = model(tran_target_clip)
-                ori_embeds = model(tran_original_data_clip)
-            elif model_type == 'ipadapter-plus':
-                target_image_embeds = model(tran_target_clip, output_hidden_states=True).hidden_states[-2]
-                ori_embeds = model(tran_original_data_clip, output_hidden_states=True).hidden_states[-2]
-                if image_proj_model_dict[model_type] is not None:
-                    proj_original_image_embeds = image_proj_model_dict[model_type](ori_embeds)
-                    ori_embeds = proj_original_image_embeds
-                    proj_target_image_embeds = image_proj_model_dict[model_type](target_image_embeds)
-                    target_image_embeds = proj_target_image_embeds
-            elif model_type == 'ipadapter':
-                target_image_embeds = model(tran_target_clip, output_hidden_states=True).pooler_output
-                ori_embeds = model(tran_original_data_clip, output_hidden_states=True).pooler_output
-                if image_proj_model_dict[model_type] is not None:
-                    proj_original_image_embeds = image_proj_model_dict[model_type](ori_embeds)
-                    ori_embeds = proj_original_image_embeds
-                    proj_target_image_embeds = image_proj_model_dict[model_type](target_image_embeds)
-                    target_image_embeds = proj_target_image_embeds
-            elif model_type == 'face_diffuser':
-                target_image_embeds = model(tran_target_clip.unsqueeze(0))
-                ori_embeds = model(tran_original_data_clip.unsqueeze(0))
-            else:
-                raise ValueError('model type choice must be one of vae, clip, and photomaker')
-            target_image_embeds_dict[k] = target_image_embeds
-            origin_image_embeds_dict[k] = ori_embeds
+            eot_trans_target_embeds_list = list()
+            eot_trans_origin_embeds_list = list()
+            for i in range(0, len(eot_trans_list)):
+                tran_target_data = eot_trans_target_data_list[i]
+                tran_origin_data = eot_trans_origin_data_list[i]
+                if model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
+                    target_embeds = model.encode_image(tran_target_data)
+                    origin_embeds = model.encode_image(tran_origin_data)
+                elif model_type == 'photomaker':
+                    target_embeds = model(tran_target_data)
+                    origin_embeds = model(tran_origin_data)
+                elif model_type == 'ipadapter-plus':
+                    target_embeds = model(tran_target_data, output_hidden_states=True).hidden_states[-2]
+                    origin_embeds = model(tran_origin_data, output_hidden_states=True).hidden_states[-2]
+                    if image_proj_model_dict[model_type] is not None:
+                        proj_origin_embeds = image_proj_model_dict[model_type](origin_embeds)
+                        origin_embeds = proj_origin_embeds
+                        proj_target_embeds = image_proj_model_dict[model_type](target_embeds)
+                        target_embeds = proj_target_embeds
+                elif model_type == 'ipadapter':
+                    target_embeds = model(tran_target_data, output_hidden_states=True).pooler_output
+                    origin_embeds = model(tran_origin_data, output_hidden_states=True).pooler_output
+                    if image_proj_model_dict[model_type] is not None:
+                        proj_origin_embeds = image_proj_model_dict[model_type](origin_embeds)
+                        origin_embeds = proj_origin_embeds
+                        proj_target_embeds = image_proj_model_dict[model_type](target_embeds)
+                        target_embeds = proj_target_embeds
+                elif model_type == 'face_diffuser':
+                    target_embeds = model(tran_target_data.unsqueeze(0))
+                    origin_embeds = model(tran_origin_data.unsqueeze(0))
+                else:
+                    raise ValueError('model type choice must be one of clip, and photomaker')
+                eot_trans_target_embeds_list.append(target_embeds)
+                eot_trans_origin_embeds_list.append(origin_embeds)
+            target_embeds_dict[k] = eot_trans_target_embeds_list
+            origin_embeds_dict[k] = eot_trans_origin_embeds_list
     # pdb.set_trace()
     Loss_dict = {}
     for epoch in range(0, attack_num):
         perturbed_data.requires_grad_()
-        tran_perturbed_data_vae = trans_vae(perturbed_data)
-        tran_perturbed_data_clip = trans_clip(perturbed_data)
+        eot_trans_perturbed_data_list = list()
+        for trans in eot_trans_list:
+            tran_perturbed_data = trans(perturbed_data)
+            eot_trans_perturbed_data_list.append(tran_perturbed_data)
         Loss_x_ = []
         Loss_d_ = []
         for k in model_dict.keys():
             model_type = k
             model = model_dict[k]
-            target_image_embeds = target_image_embeds_dict[k]
-            ori_embeds = origin_image_embeds_dict[k]
-            wi = 1
-            if model_type == 'vae':
-                wi = 5
-                adv_image_embeds = model.encode(tran_perturbed_data_vae).latent_dist.sample() * model.config.scaling_factor
-            elif model_type == 'photomaker':
-                adv_image_embeds = model(tran_perturbed_data_clip)
-            elif model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
-                adv_image_embeds = model.encode_image(tran_perturbed_data_clip)
-            elif model_type == 'ipadapter-plus':
-                adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).hidden_states[-2]
-                if image_proj_model_dict[model_type] is not None:
-                    proj_original_image_embeds = image_proj_model_dict[model_type](adv_image_embeds)
-                    adv_image_embeds = proj_original_image_embeds
-            elif model_type == 'ipadapter':
-                adv_image_embeds = model(tran_perturbed_data_clip, output_hidden_states=True).pooler_output
-                if image_proj_model_dict[model_type] is not None:
-                    proj_original_image_embeds = image_proj_model_dict[model_type](adv_image_embeds)
-                    adv_image_embeds = proj_original_image_embeds
-            elif model_type == 'face_diffuser':
-                adv_image_embeds = model(tran_perturbed_data_clip.unsqueeze(0))
-            else:
-                raise ValueError('model type choice must be one of vae, clip, ipadapter, and photomaker')
-            if loss_choice == 'mse':
-                Loss_x = wi * F.mse_loss(adv_image_embeds, target_image_embeds, reduction="mean")
-                Loss_d = -F.mse_loss(adv_image_embeds, ori_embeds, reduction="mean")
-            elif loss_choice == 'cosine':
-                Loss_x = -F.cosine_similarity(adv_image_embeds, target_image_embeds, -1).mean()
-                Loss_d = F.cosine_similarity(adv_image_embeds, ori_embeds, -1).mean()
-            else:
-                raise ValueError('Loss choice must be one of mse or cosine')
-            Loss_x_.append(Loss_x)
-            Loss_d_.append(Loss_d)
+            loss_x_list = list()
+            loss_d_list = list()
+            for i in range(0, len(eot_trans_list)): # 每个trans下的loss累加作为该模型对应的loss
+                tran_perturbed_data = eot_trans_perturbed_data_list[i]
+                wi = 1
+                if model_type == 'photomaker':
+                    adv_embeds = model(tran_perturbed_data)
+                elif model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
+                    adv_embeds = model.encode_image(tran_perturbed_data)
+                elif model_type == 'ipadapter-plus':
+                    adv_embeds = model(tran_perturbed_data, output_hidden_states=True).hidden_states[-2]
+                    if image_proj_model_dict[model_type] is not None:
+                        proj_origin_embeds = image_proj_model_dict[model_type](adv_embeds)
+                        adv_embeds = proj_origin_embeds
+                elif model_type == 'ipadapter':
+                    adv_embeds = model(tran_perturbed_data, output_hidden_states=True).pooler_output
+                    if image_proj_model_dict[model_type] is not None:
+                        proj_origin_embeds = image_proj_model_dict[model_type](adv_embeds)
+                        adv_embeds = proj_origin_embeds
+                elif model_type == 'face_diffuser':
+                    adv_embeds = model(tran_perturbed_data.unsqueeze(0))
+                else:
+                    raise ValueError('model type choice must be one of clip, ipadapter, and photomaker')
+                
+                target_embeds_list = target_embeds_dict[k]
+                origin_embeds_list = origin_embeds_dict[k]
+                target_embeds = target_embeds_list[i]
+                origin_embeds = origin_embeds_list[i]
+                if loss_choice == 'mse':
+                    Loss_x = wi * F.mse_loss(adv_embeds, target_embeds, reduction="mean")
+                    Loss_d = -F.mse_loss(adv_embeds, origin_embeds, reduction="mean")
+                elif loss_choice == 'cosine':
+                    Loss_x = -F.cosine_similarity(adv_embeds, target_embeds, -1).mean()
+                    Loss_d = F.cosine_similarity(adv_embeds, origin_embeds, -1).mean()
+                else:
+                    raise ValueError('Loss choice must be one of mse or cosine')
+                loss_x_list.append(Loss_x)
+                loss_d_list.append(Loss_d)
+            # EOT，对每个trans下的loss取平均
+            mean_Loss_x = torch.stack(loss_x_list).mean()
+            mean_Loss_d = torch.stack(loss_d_list).mean()
+            Loss_x_.append(mean_Loss_x)
+            Loss_d_.append(mean_Loss_d)
         # pdb.set_trace()
         Loss_x_ = torch.stack(Loss_x_).view(1, len(model_dict.keys()))
         Loss_d_ = torch.stack(Loss_d_).view(1, len(model_dict.keys()))
@@ -142,8 +159,8 @@ def pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为�
             print("epoch:{} th, Loss:{}".format(epoch, Loss_.item()))
         grad = torch.autograd.grad(Loss_, perturbed_data)[0]
         adv_perturbed_data = perturbed_data - alpha * grad.sign()
-        et = torch.clamp(adv_perturbed_data - original_data, min=-eps, max=+eps)
-        perturbed_data = torch.clamp(original_data + et, min=torch.min(original_data), max=torch.max(original_data)).detach().clone()
+        et = torch.clamp(adv_perturbed_data - origin_data, min=-eps, max=+eps)
+        perturbed_data = torch.clamp(origin_data + et, min=torch.min(origin_data), max=torch.max(origin_data)).detach().clone()
     return perturbed_data.cpu(), Loss_dict
 
 def load_data(data_dir, image_size=512, resample=2):
@@ -199,9 +216,7 @@ def main(args):
         if model_type == 'clip' or model_type == 'ViT-B32' or model_type == 'ViT-B16' or model_type == 'ViT-L14':
             model, _ = clip.load(model_path, device=args.device)
             model.to(torch_dtype)
-        elif model_type == 'vae':
-            model = AutoencoderKL.from_pretrained(model_path, subfolder="vae", revision='bf16', torch_dtype=torch_dtype).to(args.device)
-        elif model_type == 'photomaker':
+        if model_type == 'photomaker':
             if args.mode == "idprotector": # no visual projection
                 model = PhotoMakerIDEncoder1()
                 state_dict = torch.load(model_path, map_location="cpu")
@@ -254,36 +269,37 @@ def main(args):
         resample_interpolation = transforms.InterpolationMode.BILINEAR
     else:
         resample_interpolation = transforms.InterpolationMode.BICUBIC
-
-    gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
-    defense_transform = [
-    ]
-    if args.transform_hflip:
-        defense_transform = defense_transform + [transforms.RandomHorizontalFlip(p=0.5)]
-    if args.transform_gau:
-        defense_transform = [gau_filter] + defense_transform
-        
-    train_aug_for_clip = [
-        transforms.Resize(224, interpolation=resample_interpolation),
-        transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
-    ]
-    tensorize_and_normalize = [
-        transforms.Normalize([0.5*255]*3,[0.5*255]*3),
-    ]
-    all_trans_for_clip = train_aug_for_clip + defense_transform + tensorize_and_normalize
-    all_trans_for_clip = transforms.Compose(all_trans_for_clip)
-    print("all_trans:{}".format(all_trans_for_clip))
     
-    train_aug_for_vae = [
-        transforms.Resize(512, interpolation=resample_interpolation),
-        transforms.CenterCrop(512) if args.center_crop else transforms.RandomCrop(512),
-    ]
-    tensorize_and_normalize = [
-        transforms.Normalize([0.5*255]*3,[0.5*255]*3),
-    ]
-    all_trans_for_vae = train_aug_for_vae + tensorize_and_normalize
-    all_trans_for_vae = transforms.Compose(all_trans_for_vae)
-    print("all_trans:{}".format(all_trans_for_vae))
+    eot_trans_list = []
+    for tmp in args.eot_trans_types.split(','):
+        train_aug_for_clip = [
+            transforms.Resize(224, interpolation=resample_interpolation),
+            transforms.CenterCrop(224) if args.center_crop else transforms.RandomCrop(224),
+        ]
+        tensorize_and_normalize = [
+            transforms.Normalize([0.5*255]*3,[0.5*255]*3),
+        ]
+        defense_transform = [
+        ]
+        if tmp == 'gau':
+            gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
+            defense_transform = [gau_filter]
+        elif tmp == 'hflip':
+            hflip = transforms.RandomHorizontalFlip(p=0.5)
+            defense_transform = [hflip]
+        elif tmp == 'none':
+            continue
+        elif tmp == 'gau-hflip':
+            gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
+            hflip = transforms.RandomHorizontalFlip(p=0.5)
+            defense_transform = [gau_filter] + [hflip]
+        else:
+            raise ValueError("eot_trans_types out of range")
+        trans_for_clip = train_aug_for_clip + defense_transform + tensorize_and_normalize
+        trans_for_clip = transforms.Compose(trans_for_clip)
+        print("all_trans:{}".format(trans_for_clip))
+        eot_trans_list.append(trans_for_clip)
+    print("eot_trans_list:{}", eot_trans_list)
     
     adv_image_dir_name = args.adversarial_folder_name
     save_folder = os.path.join(args.save_dir, adv_image_dir_name)
@@ -309,19 +325,18 @@ def main(args):
             raise ValueError("target_type out of range")
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
         
-        original_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)
+        origin_data = clean_data.detach().clone().to(args.device).requires_grad_(False).to(dtype=torch_dtype)
         perturbed_data = clean_data.to(dtype=torch_dtype).to(args.device).requires_grad_(True)
         target_data = target_data.to(args.device).requires_grad_(False)
         
         adv_data, Loss_dict = pgd_ensemble_attack(model_dict, # 模型池, key为模型类型，value为模型
                 perturbed_data,
-                original_data,
+                origin_data,
                 args.alpha*255,
                 args.eps,
                 args.attack_num,
                 target_data,
-                all_trans_for_clip,
-                all_trans_for_vae,
+                eot_trans_list,
                 args.loss_choice,
                 args.w,
                 image_proj_model_dict=image_proj_model_dict)
@@ -420,18 +435,11 @@ def parse_args(input_args=None):
         help = "center crop or not"
     )
     parser.add_argument(
-        "--transform_hflip",
-        type=int,
-        default=0,
+        "--eot_trans_types",
+        type=str,
+        default="gau,none",
         required=False,
-        help = "hflip or not"
-    )
-    parser.add_argument(
-        "--transform_gau",
-        type=int,
-        default=0,
-        required=False,
-        help = "gaussian filter or not"
+        help = "gau,hflip,gau-hflip,none"
     )
     parser.add_argument(
         "--gau_kernel_size",
@@ -478,9 +486,9 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--model_type",
         type=str,
-        default='vae,ipadapter,photomaker,face_diffuser',
+        default='ipadapter,photomaker,face_diffuser',
         required=True,
-        help = "vae, clip, ipadapter, photomaker, face_diffuser"
+        help = "clip, ipadapter, photomaker, face_diffuser"
     )
     parser.add_argument(
         "--pretrained_model_name_or_path",

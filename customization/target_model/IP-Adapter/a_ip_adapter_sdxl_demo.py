@@ -1,13 +1,13 @@
 import torch
 from PIL import Image
 import os
-from ip_adapter import IPAdapterPlusXL
+from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusionInpaintPipelineLegacy, DDIMScheduler, AutoencoderKL
+from PIL import Image
+from ip_adapter import IPAdapter
+from ip_adapter import IPAdapterXL
 from ip_adapter.custom_pipelines import StableDiffusionXLCustomPipeline
 from pathlib import Path
 import argparse
-from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline, StableDiffusionInpaintPipelineLegacy, DDIMScheduler, AutoencoderKL
-from ip_adapter import IPAdapterPlus
-import pdb
 
 def load_data(data_dir, image_size=224, resample=2):
     import numpy as np
@@ -129,7 +129,7 @@ def main(args):
             add_watermarker=False,
         )
         # load ip-adapter
-        ip_model = IPAdapterPlusXL(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
+        ip_model = IPAdapterXL(pipe, args.image_encoder_path, args.ip_ckpt, args.device)
     elif args.model_type == 'sd15':
         noise_scheduler = DDIMScheduler(
             num_train_timesteps=1000,
@@ -151,7 +151,7 @@ def main(args):
             safety_checker=None
         )
         # load ip-adapter
-        ip_model = IPAdapterPlus(pipe, args.image_encoder_path, args.ip_ckpt, args.device, num_tokens=16)
+        ip_model = IPAdapter(pipe, args.image_encoder_path, args.ip_ckpt, args.device)
     else:
         raise ValueError("model_type must be sd15 or sdxl")
 
@@ -188,7 +188,7 @@ def main(args):
             torch.cuda.empty_cache()
         for image in images:
             output_image2 = ip_model.generate(pil_image=image, num_samples=2, num_inference_steps=30, seed=42, prompt="a dslr portrait of person")
-            output_image2 += ip_model.generate(pil_image=image, num_samples=2, num_inference_steps=30, seed=42, prompt="a dslr portrait of person")
+            output_image2 += ip_model.generate(pil_image=image, num_samples=2, num_inference_steps=30, seed=41, prompt="a dslr portrait of person")
             output_images2 += output_image2
             torch.cuda.empty_cache()
             torch.cuda.empty_cache()

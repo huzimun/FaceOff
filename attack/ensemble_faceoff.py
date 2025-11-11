@@ -269,7 +269,7 @@ def main(args):
         resample_interpolation = transforms.InterpolationMode.BILINEAR
     else:
         resample_interpolation = transforms.InterpolationMode.BICUBIC
-    
+    # pdb.set_trace()
     eot_trans_list = []
     for tmp in args.eot_trans_types.split(','):
         train_aug_for_clip = [
@@ -279,8 +279,6 @@ def main(args):
         tensorize_and_normalize = [
             transforms.Normalize([0.5*255]*3,[0.5*255]*3),
         ]
-        defense_transform = [
-        ]
         if tmp == 'gau':
             gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
             defense_transform = [gau_filter]
@@ -288,7 +286,7 @@ def main(args):
             hflip = transforms.RandomHorizontalFlip(p=0.5)
             defense_transform = [hflip]
         elif tmp == 'none':
-            continue
+            defense_transform = []
         elif tmp == 'gau-hflip':
             gau_filter = transforms.GaussianBlur(kernel_size=args.gau_kernel_size,)
             hflip = transforms.RandomHorizontalFlip(p=0.5)

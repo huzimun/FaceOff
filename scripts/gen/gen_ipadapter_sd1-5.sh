@@ -1,6 +1,6 @@
-export adversarial_folder_name="ipadapter_test_cosine_w0.0_num100_alpha6_eps16_input512_224_yingbu_refiner0"
-export experiment_name="ipadapter_test_cosine_w0.0_num100_alpha6_eps16_input512_224_yingbu_refiner0"
-export device="cuda:2"
+export adversarial_folder_name="test_ipadapter_sd1-5"
+export experiment_name="test_ipadapter_sd1-5"
+export device="cuda:6"
 export save_config_dir="./outputs/config_scripts_logs/${experiment_name}"
 mkdir $save_config_dir
 cp "./scripts/gen/gen_ipadapter_sd1-5.sh" $save_config_dir

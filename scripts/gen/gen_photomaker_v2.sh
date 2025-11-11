@@ -1,15 +1,13 @@
 export adversarial_folder_name="ViT-B32,ViT-B16,ViT-L14_test_cosine_w0_num100_alpha0.005_eps16_input512_yingbu"
+export device="cuda:7"
 export save_config_dir="./outputs/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
 cp "./scripts/gen/gen_photomaker.sh" $save_config_dir
-export device="cuda:7"
-
-export experiment_name="photomaker_sdxl_"$adversarial_folder_name
-python ./customization/target_model/PhotoMaker/inference.py \
+python ./customization/target_model/PhotoMaker_v2/inference.py \
   --input_folders "./outputs/adversarial_images/${adversarial_folder_name}" \
-  --save_dir "./outputs/customization_outputs/${experiment_name}" \
+  --save_dir "./outputs/customization_outputs/${adversarial_folder_name}" \
   --prompts "a photo of sks person;a dslr portrait of sks person" \
-  --photomaker_ckpt "/home/humw/Pretrains/photomaker-v1.bin" \
+  --photomaker_ckpt "/home/humw/Pretrains/TencentARC/PhotoMaker-V2/photomaker-v2.bin" \
   --base_model_path "/home/humw/Pretrains/stabilityai/stable-diffusion-xl-base-1.0" \
   --device $device \
   --seed 42 \

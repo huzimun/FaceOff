@@ -110,15 +110,15 @@ def main():
         with open(args.map_path, "r", encoding="utf-8") as f:
             max_dist_dict = json.load(f)
     # 遍历对抗图片列表
-    ism_list = [0.0 for _ in range(0, len(persons_list))]
-    fdr_list = [0.0 for _ in range(0, len(persons_list))]
+    ism_list = []
+    fdr_list = []
     # 单独存放每个提示词的ISM和FDR
     prompts_ism_list = []
-    for i in range(0, len(prompt_paths_list)):
-        prompts_ism_list.append([0.0 for _ in range(0, len(persons_list))])
+    # for i in range(0, len(prompt_paths_list)):
+    #     prompts_ism_list.append([0.0 for _ in range(0, len(persons_list))])
     prompts_fdr_list = []
-    for i in range(0, len(prompt_paths_list)):
-        prompts_fdr_list.append([0.0 for _ in range(0, len(persons_list))])
+    # for i in range(0, len(prompt_paths_list)):
+    #     prompts_fdr_list.append([0.0 for _ in range(0, len(persons_list))])
     for k, person_id in enumerate(persons_list):
         tmp_ism_list = list()
         tmp_fdr_list = list()
@@ -130,23 +130,37 @@ def main():
         elif args.is_target == 1 and args.target_path != '': # 特定target图片
             list_id_path = args.target_path
         # 遍历提示词列表
+        tmp_prompt_ism_list = list()
+        tmp_prompt_fdr_list = list()
         for j, prompt_name in enumerate(prompt_paths_list):
             image_path = os.path.join(args.data_dirs, person_id, prompt_name)
+            # 如果提示词下面是空的，直接跳过
+            if not os.path.exists(image_path) or len(os.listdir(image_path)) == 0:
+                continue
             if args.out_out == 1:
                 list_id_path = os.path.join(args.emb_dirs, person_id, prompt_name)
             ism, fdr = matching_score_genimage_id(image_path, list_id_path, args.model_name)
             if ism == None:
                 tmp_ism_list.append(0)
-                prompts_ism_list[j][k] = 0
+                tmp_prompt_ism_list.append(0)
+                # prompts_ism_list[j][k] = 0
             else:
                 tmp_ism_list.append(ism.item())
-                prompts_ism_list[j][k] = ism.item()
+                tmp_prompt_ism_list.append(ism.item())
+                # prompts_ism_list[j][k] = ism.item()
             tmp_fdr_list.append(fdr)
-            prompts_fdr_list[j][k] = fdr
+            # prompts_fdr_list[j][k] = fdr
+            tmp_prompt_fdr_list.append(fdr)
+        if len(tmp_prompt_ism_list) == 0:
+            continue
+        prompts_ism_list.append(tmp_prompt_ism_list)
+        prompts_fdr_list.append(tmp_prompt_fdr_list)
+        if len(tmp_ism_list) == 0:
+            continue
         print("tmp_ism_list:{}".format(str(tmp_ism_list)))
         print("tmp_fdr_list:{}".format(str(tmp_fdr_list)))
-        ism_list[k] = sum(tmp_ism_list) * 1.0 / len(tmp_ism_list)
-        fdr_list[k] = sum(tmp_fdr_list) * 1.0 / len(tmp_fdr_list)
+        ism_list.append(sum(tmp_ism_list) * 1.0 / len(tmp_ism_list))
+        fdr_list.append(sum(tmp_fdr_list) * 1.0 / len(tmp_fdr_list))
     print("ism_list:{}".format(ism_list))
     ism_list_data = np.array(ism_list)
     ism_sample_std = np.std(ism_list_data, ddof=1)

@@ -1,13 +1,13 @@
-export model_type="ipadapter,ipadapter-plus,photomaker" # 攻击的模型，photomaker_clip，vae，clip，ipadapter
-export pretrained_model_name_or_path="/home/humw/Pretrains/h94/IP-Adapter/sdxl_models/image_encoder,/home/humw/Pretrains/h94/IP-Adapter/models/image_encoder,/home/humw/Pretrains/photomaker-v1.bin"  # "/data1/humw/Pretrains/photomaker-v1.bin"，"/data1/humw/Pretrains/IP-Adapter/models/image_encoder"，"/data1/humw/Pretrains/stable-diffusion-2-1-base"
-export data_dir_name="VGGFace2" # 输入数据集
-export w=1 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
+export model_type="ipadapter,ipadapter-plus,photomaker" # Target Model，photomaker，ipadapter, ipadapter-plus
+export pretrained_model_name_or_path="/home/humw/Pretrains/h94/IP-Adapter/sdxl_models/image_encoder,/home/humw/Pretrains/h94/IP-Adapter/models/image_encoder,/home/humw/Pretrains/photomaker-v1.bin" # change to your pretrained model path
+export data_dir_name="VGGFace2" # test dataset name
+export w=0.5 # w=0.0, x; w=1.0, d; (1-w) * Ltgt + w * Ldevite
 export attack_num=100 # 攻击轮次
 export alpha=0.005 # 步长，与已有方法一致
 export eps=16 # 最大噪声阈值
 export input_size=224 # 输入图片的尺寸，对抗图片尺寸
 export target_type="yingbu" # target图片的类型，max代表最大clip特征mse距离, yingbu代表target image为yingbu, mist代表mist图像
-export device="cuda:5"
+export device="cuda:7"
 export loss_choice="cosine" # mse or cosine
 export eot_trans_types="gau,none" # none, hflip, gau, gau-hflip
 export gau_kernel_size=7

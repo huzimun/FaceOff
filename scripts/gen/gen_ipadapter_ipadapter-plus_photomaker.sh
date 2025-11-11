@@ -4,6 +4,7 @@ mkdir $save_config_dir
 cp "./scripts/gen/gen_ipadapter_ipadapter-plus_photomaker.sh" $save_config_dir
 export device="cuda:5"
 
+# base model is SD 1.5
 # export experiment_name="ipadapter_sd1-5_"$adversarial_folder_name
 # python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_demo.py \
 #     --model_type "sd15" \
@@ -32,6 +33,7 @@ python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_demo.py \
     --sub_name "" \
     --prior_generation_precision "fp16"
 
+# base model is SD 1.5
 # export experiment_name="ipadapter-plus_sd1-5_"$adversarial_folder_name
 # python ./customization/target_model/IP-Adapter/a_ip_adapter_sdxl_plus-face_demo.py \
 #     --model_type "sd15" \

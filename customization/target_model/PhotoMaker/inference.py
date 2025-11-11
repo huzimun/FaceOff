@@ -221,6 +221,8 @@ def main(args):
         for prompt in prompts:
             input_id_images = input_id_images_lists[i]
             image_path_list = image_path_lists[i]
+            if len(image_path_list) == 0:
+                continue
             if args.input_name != '':
                 person_id_name = image_path_list[0].split('/')[-3]
             else:
@@ -230,7 +232,8 @@ def main(args):
             negative_prompt = ""
             images = list()
             for image in input_id_images:
-                num_images_per_prompt = int(args.num_images_per_prompt / len(input_id_images))
+                # num_images_per_prompt = int(args.num_images_per_prompt / len(input_id_images))
+                num_images_per_prompt = 4 # 默认就是一张图像生成4张图像
                 tmp_images = pipe(
                     prompt=prompt,
                     input_id_images=[image],
@@ -256,7 +259,7 @@ def main(args):
             for idx, image in enumerate(images):
                 save_path = os.path.join(save_folder, f"{i}_{idx}.png")
                 image.save(save_path)
-            # 
+    # pdb.set_trace()
     del pipe
 
 if __name__ == "__main__":

@@ -1,10 +1,5 @@
 name: faceoff
 channels:
-  # - https://pypi.tuna.tsinghua.edu.cn/simple
-  # - https://mirrors.aliyun.com/pypi/simple/
-  # - http://mirrors.cloud.tencent.com/pypi/simple
-  # - http://pypi.douban.com/simple/
-  # - https://mirrors.163.com/pypi/simple/
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
@@ -250,5 +245,3 @@ dependencies:
     - yarl==1.17.1
     - youtube-dl==2021.12.17
     - zipp==3.20.2
-prefix: /data1/humw/anaconda3/envs/faceoff
-

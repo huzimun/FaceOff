@@ -1,3 +1,6 @@
+[Paper (not ready)](./)
+
+[Supplementary](./Supplementary.md)
 ##### Table of contents
 1. [Environment setup](#environment-setup)
 2. [Model preparation](#model-preparation)

@@ -4,6 +4,8 @@
 3. [Dataset preparation](#dataset-preparation)
 4. [How to run](#how-to-run)
 5. [Acknowledgement](#acknowledgement)
+6. [<span style="color:red">Supplementary</span>](./Supplementary.md)
+7. [TODO]: upload the revised paper
 
 # Official PyTorch implementation of "FaceOff: Preventing Unauthorized Text-to-Image Identity Customization"
 <div align="center">

@@ -32,7 +32,7 @@ In Table B, we evaluate the visual utility of protected images. FaceOff obtains 
 
 <figure>
   <img src="./figs/Table-C.png" alt="Impact of different target images" width="800" align="center" >
-  <figcaption>Figure C. Impact of different target images. mask is the default target image used in FcaeOff.</figcaption>
+  <figcaption>Table C. Impact of different target images. mask is the default target image used in FcaeOff.</figcaption>
 </figure>
 
 ## Target images
@@ -40,7 +40,7 @@ In Figure B, we show the different target images evaluated in our paper, includi
 
 <figure>
   <img src="./figs/Table-D.png" alt="Impact of FaceOff with different augmentation strategies on VGGFace2" width="1000" align="center" >
-  <figcaption>Figure D. Impact of FaceOff with different augmentation strategies on VGGFace2. Gaussian filtering is the default augmentation strategy in FaceOff.</figcaption>
+  <figcaption>Table D. Impact of FaceOff with different augmentation strategies on VGGFace2. Gaussian filtering is the default augmentation strategy in FaceOff.</figcaption>
 </figure>
 
 ## Augmentation strategies

@@ -6,7 +6,7 @@ import os
 from PIL import Image
 import json
 from pathlib import Path
-from diffusers import AutoencoderKL
+# from diffusers import AutoencoderKL
 import argparse
 import json
 import pdb
@@ -20,6 +20,7 @@ import time
 import math
 from ip_adapter.resampler import Resampler
 from ip_adapter.ip_adapter import ImageProjModel
+import torchjpeg.codec
 
 seed = 1
 random.seed(seed) # python的随机种子一样
@@ -284,6 +285,9 @@ def main(args):
         elif tmp == 'hflip':
             hflip = transforms.RandomHorizontalFlip(p=0.5)
             defense_transform = [hflip]
+        elif tmp == 'ColorJitter':
+            color_jitter = transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
+            defense_transform = [color_jitter]
         elif tmp == 'none':
             defense_transform = []
         elif tmp == 'gau-hflip':
@@ -318,6 +322,10 @@ def main(args):
             targeted_image_folder = './target_images/colored_mist'
         elif args.target_type == 'gray':
             targeted_image_folder = './target_images/gray'
+        elif args.target_type == 'cartoon':
+            targeted_image_folder = './target_images/cartoon'
+        elif args.target_type == 'noise':
+            targeted_image_folder = './target_images/noise'
         else:
             raise ValueError("target_type out of range")
         target_data = load_data(targeted_image_folder, args.input_size, resampling[args.resample_interpolation]).to(dtype=torch_dtype)
@@ -516,5 +524,14 @@ def parse_args(input_args=None):
 
 if __name__ == "__main__":
     args = parse_args()
+    # import pdb; pdb.set_trace()
+    t1 = time.time()
     main(args)
+    t2 = time.time()
+    # import pdb; pdb.set_trace()
+    print('TIME COST: %.6f'%(t2-t1))
+    with open(file="time_costs.txt", mode='a') as f:
+        f.write(str(t2-t1) + '\n')
+    # args = parse_args()
+    # main(args)
     

@@ -1,8 +1,8 @@
-export adversarial_folder_name="ipadapter,ipadapter-plus,photomaker_VGGFace2_ColorJitter,none_kernel7_cosine_w0.5_num100_alpha0.005_eps16_input224_yingbu"
+export adversarial_folder_name="ipadapter,ipadapter-plus,photomaker_VGGFace2_jpeg,none_kernel7_cosine_w0.5_num100_alpha0.005_eps16_input224_yingbu"
 export save_config_dir="./outputs/config_scripts_logs/${adversarial_folder_name}"
 mkdir $save_config_dir
-cp "./scripts/gen/gen_ipadapter_ipadapter-plus_photomaker.sh" $save_config_dir
-export device="cuda:5"
+cp "./scripts/gen/gen_ipadapter_ipadapter-plus_photomaker1.sh" $save_config_dir
+export device="cuda:7"
 
 # base model is SD 1.5
 # export experiment_name="ipadapter_sd1-5_"$adversarial_folder_name
